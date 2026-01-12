@@ -9,3 +9,6 @@ swag:
 
 format:
 	go fmt ./...
+
+run:
+	air

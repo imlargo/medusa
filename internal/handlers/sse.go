@@ -1,5 +1,6 @@
 package handlers
 
+/*
 import (
 	"fmt"
 	"strconv"
@@ -114,3 +115,5 @@ func (h *Handler) Publish(c *gin.Context) {
 		responses.Ok(c, "Notification sent successfully")
 	}
 }
+
+*/
