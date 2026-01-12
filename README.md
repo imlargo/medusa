@@ -1,6 +1,6 @@
 <div align="center">
   <h1>🪼 Medusa</h1>
-  <p><strong>A batteries-included Go framework for building modern, scalable backends</strong></p>
+  <p><strong>A batteries-included Go backend framework for building modern, scalable backends</strong></p>
   
   [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
   [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
