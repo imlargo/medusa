@@ -22,7 +22,7 @@ type RateLimiterConfig struct {
 }
 
 type RedisConfig struct {
-	RedisURL string
+	Url string
 }
 
 func LoadConfig() Config {
@@ -30,6 +30,7 @@ func LoadConfig() Config {
 		HOST,
 		PORT,
 		DATABASE_URL,
+		REDIS_URL,
 		JWT_SECRET,
 		JWT_TOKEN_EXPIRATION,
 		JWT_REFRESH_EXPIRATION,
@@ -58,6 +59,9 @@ func LoadConfig() Config {
 			Enabled:              env.GetEnvBool(RATE_LIMITER_ENABLED, true),
 			RequestsPerTimeFrame: env.GetEnvInt(RATE_LIMITER_REQUESTS_PER_TIME_FRAME, 100),
 			TimeFrame:            time.Duration(env.GetEnvInt(RATE_LIMITER_TIME_FRAME_MINUTES, 1)) * time.Minute,
+		},
+		Redis: RedisConfig{
+			Url: env.GetEnvString(REDIS_URL, ""),
 		},
 	}
 }

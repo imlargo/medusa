@@ -72,7 +72,7 @@ func Mount(app *app.App, cfg config.Config, router *gin.Engine, logger *logger.L
 	}
 
 	// Redis
-	redisClient, err := database.NewRedisClient(cfg.Redis.RedisURL)
+	redisClient, err := database.NewRedisClient(cfg.Redis.Url)
 	if err != nil {
 		logger.Fatal("Could not connect to Redis: " + err.Error())
 		return
