@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/imlargo/medusa/internal/dto"
+	_ "github.com/imlargo/medusa/internal/models"
 	"github.com/imlargo/medusa/internal/services"
 	"github.com/imlargo/medusa/pkg/medusa/core/handler"
 	"github.com/imlargo/medusa/pkg/medusa/core/responses"
@@ -20,6 +21,17 @@ func NewAuthHandler(handler *handler.Handler, authService services.AuthService) 
 	}
 }
 
+// @Summary		Login user
+// @Router			/v1/auth/login [post]
+// @Description	Login user with email and password
+// @Tags		auth
+// @Accept		json
+// @Param		payload	body	dto.LoginWithPassword	true	"Login user request payload"
+// @Produce		json
+// @Success		200	{object}	dto.AuthResponse	"User logged in successfully"
+// @Failure		400	{object}	responses.ErrorResponse	"Bad Request"
+// @Failure		500	{object}	responses.ErrorResponse	"Internal Server Error"
+// @Security     BearerAuth
 func (a *AuthHandler) LoginWithPassword(c *gin.Context) {
 	var payload dto.LoginWithPassword
 	if err := c.ShouldBindJSON(&payload); err != nil {
@@ -63,6 +75,15 @@ func (a *AuthHandler) Register(c *gin.Context) {
 	responses.SuccessOK(c, authData)
 }
 
+// @Summary		Get user info
+// @Router			/v1/auth/user [get]
+// @Description	Get the authenticated user's information
+// @Tags		auth
+// @Produce		json
+// @Success		200	{object}	models.User	"Authenticated user's
+// @Failure		401	{object}	responses.ErrorResponse	"Unauthorized"
+// @Failure		500	{object}	responses.ErrorResponse	"Internal Server Error
+// @Security     BearerAuth
 func (a *AuthHandler) GetUser(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {

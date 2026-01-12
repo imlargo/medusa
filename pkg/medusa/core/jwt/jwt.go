@@ -14,6 +14,11 @@ type JWT struct {
 }
 
 func NewJwt(cfg Config) *JWT {
+
+	if err := cfg.Validate(); err != nil {
+		panic(err)
+	}
+
 	return &JWT{config: cfg}
 }
 
@@ -25,15 +30,12 @@ func (j *JWT) GenerateToken(userID uint, expiresAt time.Time) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "",
-			Subject:   "",
-			ID:        "",
 			Audience:  []string{},
 		},
 	})
 
 	// Sign and get the complete encoded token as a string using the key
-	tokenString, err := token.SignedString(j.config.Secret)
+	tokenString, err := token.SignedString([]byte(j.config.Secret))
 	if err != nil {
 		return "", err
 	}

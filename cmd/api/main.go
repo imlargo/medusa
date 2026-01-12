@@ -84,7 +84,9 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 		TimeFrame:            cfg.RateLimiter.TimeFrame,
 	})
 
-	jwtAuth := jwt.NewJwt(jwt.Config{})
+	jwtAuth := jwt.NewJwt(jwt.Config{
+		Secret: cfg.Auth.JwtSecret,
+	})
 
 	// Database
 	db, err := database.NewPostgresDatabase(cfg.Database.URL)
