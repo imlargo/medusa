@@ -1,4 +1,21 @@
 info:
-  contact: {}
+  contact:
+    name: Default
+    url: https://default.dev
+  description: Template api
+  license:
+    name: MIT
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  title: Meudsa API
+  version: "1.0"
 paths: {}
+securityDefinitions:
+  ApiKey:
+    in: header
+    name: X-API-Key
+    type: apiKey
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

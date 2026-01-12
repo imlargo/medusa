@@ -26,6 +26,21 @@ import (
 	"github.com/imlargo/medusa/pkg/medusa/services/storage"
 )
 
+// @title Meudsa API
+// @version 1.0
+// @description Template api
+
+// @contact.name Default
+// @contact.url https://default.dev
+// @license.name MIT
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+
+// @securityDefinitions.apiKey ApiKey
+// @in header
+// @name X-API-Key
 func main() {
 	cfg := config.LoadConfig()
 
