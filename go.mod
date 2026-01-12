@@ -1,4 +1,4 @@
-module github.com/imlargo/go-api
+module github.com/imlargo/medusa
 
 go 1.25.4
 

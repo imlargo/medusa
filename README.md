@@ -109,10 +109,10 @@ package main
 import (
     "context"
     "github.com/gin-gonic/gin"
-    "github.com/imlargo/go-api/pkg/medusa/core/app"
-    "github.com/imlargo/go-api/pkg/medusa/core/logger"
-    "github.com/imlargo/go-api/pkg/medusa/core/responses"
-    "github.com/imlargo/go-api/pkg/medusa/core/server/http"
+    "github.com/imlargo/medusa/pkg/medusa/core/app"
+    "github.com/imlargo/medusa/pkg/medusa/core/logger"
+    "github.com/imlargo/medusa/pkg/medusa/core/responses"
+    "github.com/imlargo/medusa/pkg/medusa/core/server/http"
 )
 
 func main() {
@@ -145,7 +145,7 @@ func main() {
 #### Cache with Redis
 
 ```go
-import "github.com/imlargo/go-api/pkg/medusa/services/cache"
+import "github.com/imlargo/medusa/pkg/medusa/services/cache"
 
 redisClient := database.NewRedisClient("redis://localhost:6379")
 cache := cache.NewRedisCache(redisClient)
@@ -161,7 +161,7 @@ cache.Get(ctx, "user:123", &user)
 #### File Storage (S3/R2)
 
 ```go
-import "github.com/imlargo/go-api/pkg/medusa/services/storage"
+import "github.com/imlargo/medusa/pkg/medusa/services/storage"
 
 storage, _ := storage.NewFileStorage(storage.StorageProviderR2, config)
 
@@ -176,7 +176,7 @@ url, _ := storage.GetPresignedURL("documents/secret.pdf", 15*time.Minute)
 #### Real-time with Server-Sent Events
 
 ```go
-import "github.com/imlargo/go-api/pkg/medusa/services/sse"
+import "github.com/imlargo/medusa/pkg/medusa/services/sse"
 
 sseManager := sse. NewSSEManager()
 
@@ -211,7 +211,7 @@ sseManager.Send(userID, &sse. Message{
 #### Background Jobs with PubSub
 
 ```go
-import "github.com/imlargo/go-api/pkg/medusa/services/pubsub"
+import "github.com/imlargo/medusa/pkg/medusa/services/pubsub"
 
 // Publisher
 publisher := pubsub.NewRabbitMQPublisher(config)
@@ -235,7 +235,7 @@ subscriber.Subscribe(ctx, "user.registered", func(msg []byte) error {
 #### Send Email
 
 ```go
-import "github.com/imlargo/go-api/pkg/medusa/services/email"
+import "github.com/imlargo/medusa/pkg/medusa/services/email"
 
 emailService := email.NewResendClient(apiKey)
 emailService.SendEmail(&email.SendEmailParams{
@@ -314,8 +314,8 @@ Every component in `pkg/medusa` is independently usable:
 
 ```go
 // Use only what you need
-import "github.com/imlargo/go-api/pkg/medusa/services/cache"
-import "github.com/imlargo/go-api/pkg/medusa/core/logger"
+import "github.com/imlargo/medusa/pkg/medusa/services/cache"
+import "github.com/imlargo/medusa/pkg/medusa/core/logger"
 
 // No need to import the entire framework
 ```
@@ -471,7 +471,7 @@ RABBITMQ_URL=amqp://guest:guest@localhost:5672/
 ### Available Middleware
 
 ```go
-import "github.com/imlargo/go-api/pkg/medusa/middleware"
+import "github.com/imlargo/medusa/pkg/medusa/middleware"
 
 // JWT Authentication
 router.Use(middleware.AuthTokenMiddleware(jwtAuth))
