@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/imlargo/go-api/pkg/medusa/core/server"
+	"github.com/imlargo/medusa/pkg/medusa/core/server"
 )
 
 type App struct {

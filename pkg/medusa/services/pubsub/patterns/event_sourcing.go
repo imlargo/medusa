@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/imlargo/go-api/pkg/medusa/services/pubsub"
+	"github.com/imlargo/medusa/pkg/medusa/services/pubsub"
 )
 
 // Event Sourcing Pattern

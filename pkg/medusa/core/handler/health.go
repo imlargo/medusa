@@ -2,7 +2,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/go-api/pkg/medusa/core/responses"
+	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 )
 
 type HealthHandler struct {

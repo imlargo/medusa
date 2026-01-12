@@ -1,7 +1,7 @@
 package email
 
 import (
-	"github.com/imlargo/go-api/pkg/medusa/services/email"
+	"github.com/imlargo/medusa/pkg/medusa/services/email"
 	"github.com/resend/resend-go/v2"
 )
 

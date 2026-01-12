@@ -1,7 +1,7 @@
 package service
 
 import (
-	"github.com/imlargo/go-api/pkg/medusa/core/logger"
+	"github.com/imlargo/medusa/pkg/medusa/core/logger"
 )
 
 type Service struct {
