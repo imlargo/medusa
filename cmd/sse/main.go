@@ -1,5 +1,7 @@
 package main
 
+/*
+
 import (
 	"context"
 
@@ -44,3 +46,5 @@ func Mount(app *app.App, cfg config.Config, router *gin.Engine, logger *logger.L
 	router.GET("/sse/listen", sseHandler.Listen)
 	router.POST("/sse/publish", sseHandler.Publish)
 }
+
+*/
