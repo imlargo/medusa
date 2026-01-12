@@ -1,3 +1,5 @@
+// Package middleware provides HTTP middleware components for Medusa applications.
+// It includes authentication, authorization, rate limiting, CORS, and metrics collection.
 package middleware
 
 import (
@@ -9,6 +11,10 @@ import (
 	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 )
 
+// NewAuthTokenMiddleware creates a middleware that validates JWT tokens from the Authorization header.
+// It expects the token in the format "Bearer <token>".
+// On successful validation, it extracts the user ID from the token claims and stores it in the context.
+// If validation fails, it aborts the request with an Unauthorized response.
 func NewAuthTokenMiddleware(jwtAuthenticator *jwt.JWT) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authHeader := ctx.GetHeader("Authorization")

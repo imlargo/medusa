@@ -7,6 +7,9 @@ import (
 	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 )
 
+// BearerApiKeyMiddleware creates a middleware that validates API keys from the Authorization header.
+// It expects the key in the format "Bearer <api-key>".
+// If the key is missing or invalid, it aborts the request with an Unauthorized response.
 func BearerApiKeyMiddleware(apiKey string) gin.HandlerFunc {
 
 	return func(ctx *gin.Context) {

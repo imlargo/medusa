@@ -9,6 +9,10 @@ import (
 	"github.com/imlargo/medusa/pkg/medusa/core/metrics"
 )
 
+// NewMetricsMiddleware creates a middleware that records HTTP request metrics.
+// It tracks request counts and durations for each endpoint, method, and status code.
+// SSE (Server-Sent Events) requests and OPTIONS requests are skipped.
+// For 404 responses where no route matched, it uses the actual request URL path.
 func NewMetricsMiddleware(metrics metrics.MetricsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 

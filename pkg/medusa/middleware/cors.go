@@ -8,6 +8,10 @@ import (
 	"github.com/imlargo/medusa/pkg/medusa/tools"
 )
 
+// NewCorsMiddleware creates a CORS middleware with the specified host and allowed origins.
+// It configures standard HTTP methods, credentials support, and common headers.
+// The host is automatically added to the list of allowed origins.
+// Wildcard origins are supported for flexible cross-origin access.
 func NewCorsMiddleware(host string, origins []string) gin.HandlerFunc {
 
 	if origins == nil {
