@@ -13,6 +13,7 @@ import (
 	"github.com/imlargo/go-api/pkg/medusa/core/handler"
 	"github.com/imlargo/go-api/pkg/medusa/core/jwt"
 	"github.com/imlargo/go-api/pkg/medusa/core/logger"
+	"github.com/imlargo/go-api/pkg/medusa/core/metrics"
 	"github.com/imlargo/go-api/pkg/medusa/core/ratelimiter"
 	"github.com/imlargo/go-api/pkg/medusa/core/repository"
 	"github.com/imlargo/go-api/pkg/medusa/core/responses"
@@ -89,6 +90,9 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	// Cache
 	_ = cache.NewRedisCache(redisClient)
 
+	// Metrics
+	metricsService := metrics.NewPrometheusMetrics()
+
 	// Repositories
 	medusaStore := repository.NewStore(db, logger)
 	store := store.NewStore(medusaStore)
@@ -107,6 +111,7 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	// Middlewares
 	authTokenMiddleware := middleware.NewAuthTokenMiddleware(jwtAuth)
 	rateLimiterMiddleware := middleware.NewRateLimiterMiddleware(rl)
+	metricsMiddleware := middleware.NewMetricsMiddleware(metricsService)
 
 	// Handlers
 	router.GET("/health", healthHandler.Health)
@@ -122,5 +127,5 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 		}
 	}
 
-	v1.Use(authTokenMiddleware, rateLimiterMiddleware)
+	v1.Use(authTokenMiddleware, rateLimiterMiddleware, metricsMiddleware)
 }
