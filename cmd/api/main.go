@@ -154,10 +154,10 @@ func RegisterDocs(app *app.App, cfg *config.Config, router *gin.Engine, logger *
 	docs.SwaggerInfo.BasePath = "/"
 
 	schemaUrl := host
-	schemaUrl += "/internal/docs/doc.json"
+	schemaUrl += "/docs/doc.json"
 
 	urlSwaggerJson := ginSwagger.URL(schemaUrl)
-	router.GET("/internal/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, urlSwaggerJson))
+	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, urlSwaggerJson))
 }
 
 func IsLocalhostUrl(host string) bool {
