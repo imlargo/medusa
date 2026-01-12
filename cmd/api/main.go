@@ -14,10 +14,10 @@ import (
 	"github.com/imlargo/go-api/pkg/medusa/core/jwt"
 	"github.com/imlargo/go-api/pkg/medusa/core/logger"
 	"github.com/imlargo/go-api/pkg/medusa/core/ratelimiter"
-	medusarepo "github.com/imlargo/go-api/pkg/medusa/core/repository"
+	"github.com/imlargo/go-api/pkg/medusa/core/repository"
 	"github.com/imlargo/go-api/pkg/medusa/core/responses"
 	"github.com/imlargo/go-api/pkg/medusa/core/server/http"
-	medusaservice "github.com/imlargo/go-api/pkg/medusa/core/service"
+	"github.com/imlargo/go-api/pkg/medusa/core/service"
 	"github.com/imlargo/go-api/pkg/medusa/services/cache"
 	"github.com/imlargo/go-api/pkg/medusa/services/storage"
 )
@@ -89,10 +89,10 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	_ = cache.NewRedisCache(redisClient)
 
 	// Repositories
-	medusaStore := medusarepo.NewStore(db, logger)
+	medusaStore := repository.NewStore(db, logger)
 	store := store.NewStore(medusaStore)
 
-	baseService := medusaservice.NewService(logger)
+	baseService := service.NewService(logger)
 	serviceContainer := services.NewService(baseService, store, cfg)
 	userService := services.NewUserService(serviceContainer)
 	authService := services.NewAuthService(serviceContainer, userService, jwtAuth)

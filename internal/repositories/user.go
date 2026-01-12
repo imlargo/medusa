@@ -4,20 +4,20 @@ import (
 	"context"
 
 	"github.com/imlargo/go-api/internal/models"
-	medusarepo "github.com/imlargo/go-api/pkg/medusa/core/repository"
+	"github.com/imlargo/go-api/pkg/medusa/core/repository"
 )
 
 type UserRepository interface {
-	medusarepo.WithCrud[models.User]
+	repository.WithCrud[models.User]
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
 }
 
 type userRepository struct {
-	*medusarepo.CRUDRepository[models.User]
+	*repository.CRUDRepository[models.User]
 }
 
-func NewUserRepository(repo *medusarepo.Repository) UserRepository {
-	return &userRepository{CRUDRepository: medusarepo.NewCRUDRepository[models.User](repo)}
+func NewUserRepository(repo *repository.Repository) UserRepository {
+	return &userRepository{CRUDRepository: repository.NewCRUDRepository[models.User](repo)}
 }
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
