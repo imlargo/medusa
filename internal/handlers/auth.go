@@ -36,6 +36,17 @@ func (a *AuthHandler) LoginWithPassword(c *gin.Context) {
 	responses.SuccessOK(c, authResponse)
 }
 
+// @Summary		Register user
+// @Router			/v1/auth/register [post]
+// @Description	Register a new user with email, password
+// @Tags		auth
+// @Accept		json
+// @Param		payload	body	dto.RegisterUser	true	"Register user request payload"
+// @Produce		json
+// @Success		200	{object}	dto.AuthResponse	"User registered successfully
+// @Failure		400	{object}	responses.ErrorResponse	"Bad Request"
+// @Failure		500	{object}	responses.ErrorResponse	"Internal Server Error
+// @Security     BearerAuth
 func (a *AuthHandler) Register(c *gin.Context) {
 	var payload dto.RegisterUser
 	if err := c.ShouldBindJSON(&payload); err != nil {

@@ -26,9 +26,9 @@ import (
 	"github.com/imlargo/medusa/pkg/medusa/services/storage"
 )
 
-// @title Meudsa API
+// @title Medusa
 // @version 1.0
-// @description Template api
+// @description Medusa example api
 
 // @contact.name Default
 // @contact.url https://default.dev

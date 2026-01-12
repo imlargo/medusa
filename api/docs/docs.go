@@ -21,7 +21,145 @@ const docTemplate = `{
     },
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
-    "paths": {},
+    "paths": {
+        "/v1/auth/register": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Register a new user with email, password",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Register user",
+                "parameters": [
+                    {
+                        "description": "Register user request payload",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_imlargo_medusa_internal_dto.RegisterUser"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User registered successfully",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_imlargo_medusa_internal_dto.AuthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "github_com_imlargo_medusa_internal_dto.AuthResponse": {
+            "type": "object",
+            "properties": {
+                "tokens": {
+                    "$ref": "#/definitions/github_com_imlargo_medusa_internal_dto.AuthTokens"
+                },
+                "user": {
+                    "$ref": "#/definitions/github_com_imlargo_medusa_internal_models.User"
+                }
+            }
+        },
+        "github_com_imlargo_medusa_internal_dto.AuthTokens": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_imlargo_medusa_internal_dto.RegisterUser": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_imlargo_medusa_internal_models.User": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorCode": {
+            "type": "string",
+            "enum": [
+                "BIND_JSON",
+                "NOT_FOUND",
+                "INTERNAL_SERVER_ERROR",
+                "BAD_REQUEST",
+                "TOO_MANY_REQUESTS",
+                "UNAUTHORIZED"
+            ],
+            "x-enum-varnames": [
+                "ErrBindJson",
+                "ErrNotFound",
+                "ErrInternalServer",
+                "ErrBadRequest",
+                "ErrToManyRequests",
+                "ErrUnauthorized"
+            ]
+        },
+        "github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorCode"
+                },
+                "details": {},
+                "error": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        }
+    },
     "securityDefinitions": {
         "ApiKey": {
             "type": "apiKey",
@@ -42,8 +180,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "Meudsa API",
-	Description:      "Template api",
+	Title:            "Medusa",
+	Description:      "Medusa example api",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -1,14 +1,105 @@
+definitions:
+  github_com_imlargo_medusa_internal_dto.AuthResponse:
+    properties:
+      tokens:
+        $ref: '#/definitions/github_com_imlargo_medusa_internal_dto.AuthTokens'
+      user:
+        $ref: '#/definitions/github_com_imlargo_medusa_internal_models.User'
+    type: object
+  github_com_imlargo_medusa_internal_dto.AuthTokens:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    type: object
+  github_com_imlargo_medusa_internal_dto.RegisterUser:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  github_com_imlargo_medusa_internal_models.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorCode:
+    enum:
+    - BIND_JSON
+    - NOT_FOUND
+    - INTERNAL_SERVER_ERROR
+    - BAD_REQUEST
+    - TOO_MANY_REQUESTS
+    - UNAUTHORIZED
+    type: string
+    x-enum-varnames:
+    - ErrBindJson
+    - ErrNotFound
+    - ErrInternalServer
+    - ErrBadRequest
+    - ErrToManyRequests
+    - ErrUnauthorized
+  github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse:
+    properties:
+      code:
+        $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorCode'
+      details: {}
+      error:
+        type: string
+      status:
+        type: integer
+    type: object
 info:
   contact:
     name: Default
     url: https://default.dev
-  description: Template api
+  description: Medusa example api
   license:
     name: MIT
     url: http://www.apache.org/licenses/LICENSE-2.0.html
-  title: Meudsa API
+  title: Medusa
   version: "1.0"
-paths: {}
+paths:
+  /v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with email, password
+      parameters:
+      - description: Register user request payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_imlargo_medusa_internal_dto.RegisterUser'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User registered successfully
+          schema:
+            $ref: '#/definitions/github_com_imlargo_medusa_internal_dto.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Register user
+      tags:
+      - auth
 securityDefinitions:
   ApiKey:
     in: header
