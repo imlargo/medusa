@@ -5,6 +5,7 @@ import (
 	"github.com/imlargo/medusa/internal/dto"
 	_ "github.com/imlargo/medusa/internal/models"
 	"github.com/imlargo/medusa/internal/services"
+	"github.com/imlargo/medusa/pkg/medusa"
 	"github.com/imlargo/medusa/pkg/medusa/core/handler"
 	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 )
@@ -85,7 +86,7 @@ func (a *AuthHandler) Register(c *gin.Context) {
 // @Failure		500	{object}	responses.ErrorResponse	"Internal Server Error
 // @Security     BearerAuth
 func (a *AuthHandler) GetUser(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userID, exists := c.Get(medusa.UserIDContextKey)
 	if !exists {
 		responses.ErrorUnauthorized(c, "User not authenticated")
 		return
