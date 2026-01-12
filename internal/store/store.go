@@ -7,12 +7,12 @@ import (
 
 type Store struct {
 	*medusarepo.Store
-	UserRepository repository.UserRepository
+	Users repository.UserRepository
 }
 
 func NewStore(store *medusarepo.Store) *Store {
 	return &Store{
-		Store:          store,
-		UserRepository: repository.NewUserRepository(store.BaseRepo),
+		Store: store,
+		Users: repository.NewUserRepository(store.BaseRepo),
 	}
 }
