@@ -1,7 +1,7 @@
 package database
 
 import (
-	"github.com/imlargo/go-api/internal/models"
+	"github.com/imlargo/medusa/internal/models"
 	"gorm.io/gorm"
 )
 

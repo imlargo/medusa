@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/imlargo/go-api/internal/models"
+import "github.com/imlargo/medusa/internal/models"
 
 type LoginWithPassword struct {
 	Email    string `json:"email" binding:"required,email"`
