@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// TransactionManager maneja transacciones de manera centralizada
+// TransactionManager handles transactions in a centralized manner
 type TransactionManager interface {
 	WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 	WithTransactionOpts(ctx context.Context, opts *sql.TxOptions, fn func(ctx context.Context) error) error
@@ -26,7 +26,7 @@ func (tm *transactionManager) WithTransaction(ctx context.Context, fn func(ctx c
 }
 
 func (tm *transactionManager) WithTransactionOpts(ctx context.Context, opts *sql.TxOptions, fn func(ctx context.Context) error) error {
-	// Si ya hay una transacción en el contexto, reutilizarla (transacciones anidadas)
+	// If there's already a transaction in context, reuse it (nested transactions)
 	if _, ok := ctx.Value(txKey).(*gorm.DB); ok {
 		return fn(ctx)
 	}

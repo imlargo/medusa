@@ -29,7 +29,7 @@ func NewRepository(db *gorm.DB, logger *logger.Logger, opts ...RepositoryOption)
 	return r
 }
 
-// DB devuelve la conexión apropiada (tx si existe en contexto, o db normal)
+// DB returns the appropriate connection (tx if exists in context, or normal db)
 func (r *Repository) DB(ctx context.Context) *gorm.DB {
 	if tx, ok := ctx.Value(txKey).(*gorm.DB); ok {
 		return tx

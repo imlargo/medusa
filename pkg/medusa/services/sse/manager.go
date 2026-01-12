@@ -39,7 +39,7 @@ func (sm *sseManager) Subscribe(ctx context.Context, userID uint, clientID strin
 	defer sm.mutex.Unlock()
 
 	if existingClient, exists := sm.clients[clientID]; exists {
-		// Cancelar la conexión existente
+		// Cancel the existing connection
 		existingClient.Cancel()
 		sm.removeClientUnsafe(clientID)
 	}
@@ -49,7 +49,7 @@ func (sm *sseManager) Subscribe(ctx context.Context, userID uint, clientID strin
 	client := &clientConn{
 		ID:       clientID,
 		UserID:   userID,
-		Channel:  make(chan *Message, 100), // Buffer para evitar bloqueos
+		Channel:  make(chan *Message, 100), // Buffer to avoid blocking
 		Context:  clientCtx,
 		Cancel:   cancel,
 		LastSeen: time.Now(),
@@ -66,7 +66,7 @@ func (sm *sseManager) Subscribe(ctx context.Context, userID uint, clientID strin
 	return client, nil
 }
 
-// Unsubscribe desuscribe un dispositivo
+// Unsubscribe unsubscribes a device
 func (sm *sseManager) Unsubscribe(userID uint, clientID string) error {
 	sm.mutex.Lock()
 	defer sm.mutex.Unlock()
@@ -123,17 +123,17 @@ func (sm *sseManager) Send(userID uint, message *Message) error {
 	return nil
 }
 
-// removeClientUnsafe remueve un cliente (debe llamarse con mutex bloqueado)
+// removeClientUnsafe removes a client (must be called with mutex locked)
 func (sm *sseManager) removeClientUnsafe(clientID string) {
 	client, exists := sm.clients[clientID]
 	if !exists {
 		return
 	}
 
-	// Cerrar canal
+	// Close channel
 	close(client.Channel)
 
-	// Remover de índices
+	// Remove from indexes
 	delete(sm.clients, clientID)
 	if userClients, exists := sm.userIndex[client.UserID]; exists {
 		delete(userClients, clientID)
