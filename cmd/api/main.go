@@ -7,7 +7,7 @@ import (
 	"github.com/imlargo/go-api/internal/config"
 	"github.com/imlargo/go-api/internal/database"
 	"github.com/imlargo/go-api/internal/handlers"
-	"github.com/imlargo/go-api/internal/service"
+	"github.com/imlargo/go-api/internal/services"
 	"github.com/imlargo/go-api/internal/store"
 	"github.com/imlargo/go-api/pkg/medusa/core/app"
 	"github.com/imlargo/go-api/pkg/medusa/core/handler"
@@ -93,9 +93,9 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	store := store.NewStore(medusaStore)
 
 	baseService := medusaservice.NewService(logger)
-	serviceContainer := service.NewService(baseService, store, cfg)
-	userService := service.NewUserService(serviceContainer)
-	authService := service.NewAuthService(serviceContainer, userService, jwtAuth)
+	serviceContainer := services.NewService(baseService, store, cfg)
+	userService := services.NewUserService(serviceContainer)
+	authService := services.NewAuthService(serviceContainer, userService, jwtAuth)
 
 	// Handlers
 	baseHander := handler.NewHandler(logger)

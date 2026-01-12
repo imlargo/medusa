@@ -3,17 +3,17 @@ package handlers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/imlargo/go-api/internal/dto"
-	"github.com/imlargo/go-api/internal/service"
+	"github.com/imlargo/go-api/internal/services"
 	"github.com/imlargo/go-api/pkg/medusa/core/handler"
 	"github.com/imlargo/go-api/pkg/medusa/core/responses"
 )
 
 type AuthHandler struct {
 	*handler.Handler
-	authService service.AuthService
+	authService services.AuthService
 }
 
-func NewAuthHandler(handler *handler.Handler, authService service.AuthService) *AuthHandler {
+func NewAuthHandler(handler *handler.Handler, authService services.AuthService) *AuthHandler {
 	return &AuthHandler{
 		Handler:     handler,
 		authService: authService,
