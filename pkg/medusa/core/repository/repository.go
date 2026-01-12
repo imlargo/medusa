@@ -12,7 +12,6 @@ type ctxKey string
 const txKey ctxKey = "tx"
 
 type Repository struct {
-	entity any
 	logger *logger.Logger
 	db     *gorm.DB
 }

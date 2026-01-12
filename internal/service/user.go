@@ -61,7 +61,7 @@ func (s *userServiceImpl) DeleteUser(userID uint) error {
 }
 
 func (s *userServiceImpl) GetUserByID(userID uint) (*models.User, error) {
-	return s.store.Users.GetByID(context.Background(), userID)
+	return s.store.Users.Get(context.Background(), userID)
 }
 
 func (s *userServiceImpl) GetUserByEmail(email string) (*models.User, error) {
