@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🐍 Medusa</h1>
+  <h1>🪼 Medusa</h1>
   <p><strong>A batteries-included Go framework for building modern, scalable backends</strong></p>
   
   [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
@@ -268,7 +268,7 @@ Medusa follows **Clean Architecture** principles with a pragmatic twist structur
 │   ├── service/              # Business logic
 │   └── store/                # Repository composition
 │
-└── pkg/medusa/               # 🐍 THE FRAMEWORK (reusable)
+└── pkg/medusa/               # 🪼 THE FRAMEWORK (reusable)
     ├── core/                 # Core components
     │   ├── app/             # Application lifecycle
     │   ├── env/             # Environment utilities
