@@ -8,6 +8,22 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// LoadEnv loads environment variables from a .env file in the current directory.
+// If the .env file doesn't exist or cannot be loaded, it logs a warning and
+// continues with system environment variables.
+//
+// This function should be called early in your application's initialization:
+//
+//	func main() {
+//	    env.LoadEnv()
+//	    // ... rest of initialization
+//	}
+//
+// The .env file format is:
+//
+//	KEY=value
+//	DATABASE_URL=postgres://localhost/mydb
+//	DEBUG=true
 func LoadEnv() {
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
@@ -15,7 +31,25 @@ func LoadEnv() {
 	}
 }
 
-// Initialize loads environment variables from .env file
+// CheckEnv validates that all required environment variables are set.
+// It first calls LoadEnv() to load variables from .env file, then checks
+// that each required variable has a non-empty value.
+//
+// Returns an error listing all missing variables if any are not set.
+// Returns nil if all required variables are present.
+//
+// Example:
+//
+//	required := []string{
+//	    "DATABASE_URL",
+//	    "JWT_SECRET",
+//	    "REDIS_URL",
+//	}
+//	if err := env.CheckEnv(required); err != nil {
+//	    log.Fatal(err) // Prints: missing required environment variables: [JWT_SECRET REDIS_URL]
+//	}
+//
+// This is useful for failing fast at startup if critical configuration is missing.
 func CheckEnv(required []string) error {
 	var missingEnvVars []string
 

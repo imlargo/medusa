@@ -9,15 +9,15 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// OAuth2Authenticator es el autenticador genérico para OAuth2
+// OAuth2Authenticator is the generic authenticator for OAuth2
 type OAuth2Authenticator struct {
 	oauthConfig    *oauth2.Config
 	providerConfig Provider
 }
 
-// NewGenericAuthenticator crea un nuevo autenticador genérico
+// NewGenericAuthenticator creates a new generic authenticator
 func NewGenericAuthenticator(oauthConfig *oauth2.Config, provider Provider) *OAuth2Authenticator {
-	// Asignar los scopes del proveedor si no están definidos
+	// Assign provider scopes if not defined
 	if len(oauthConfig.Scopes) == 0 {
 		oauthConfig.Scopes = provider.Scopes
 	}
@@ -28,30 +28,30 @@ func NewGenericAuthenticator(oauthConfig *oauth2.Config, provider Provider) *OAu
 	}
 }
 
-// GetUser obtiene la información del usuario desde cualquier proveedor OAuth2
+// GetUser retrieves user information from any OAuth2 provider
 func (a *OAuth2Authenticator) GetUser(token *oauth2.Token) (*User, error) {
-	// Crear cliente HTTP con el token de acceso
+	// Create HTTP client with access token
 	client := a.oauthConfig.Client(context.Background(), token)
 
-	// Realizar la petición al endpoint de información del usuario
+	// Make request to user info endpoint
 	resp, err := client.Get(a.providerConfig.UserInfoURL)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving user information from %s: %v", a.providerConfig.Name, err)
 	}
 	defer resp.Body.Close()
 
-	// Verificar el código de estado
+	// Verify status code
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("error in %s API response: %s", a.providerConfig.Name, resp.Status)
 	}
 
-	// Decodificar la respuesta en un mapa genérico
+	// Decode response into generic map
 	var rawData map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&rawData); err != nil {
 		return nil, fmt.Errorf("error decoding user information: %v", err)
 	}
 
-	// Mapear los campos al usuario genérico
+	// Map fields to generic user
 	user := &User{
 		RawData: rawData,
 	}
@@ -61,7 +61,7 @@ func (a *OAuth2Authenticator) GetUser(token *oauth2.Token) (*User, error) {
 	user.Name = a.extractField(rawData, a.providerConfig.FieldMapping.Name)
 	user.Picture = a.extractField(rawData, a.providerConfig.FieldMapping.Picture)
 
-	// Manejar VerifiedEmail (puede ser bool o no existir)
+	// Handle VerifiedEmail (may be bool or not exist)
 	if verifiedField := a.providerConfig.FieldMapping.VerifiedEmail; verifiedField != "" {
 		if verified, ok := rawData[verifiedField].(bool); ok {
 			user.VerifiedEmail = verified
@@ -71,33 +71,33 @@ func (a *OAuth2Authenticator) GetUser(token *oauth2.Token) (*User, error) {
 	return user, nil
 }
 
-// extractField extrae un campo del mapa de datos raw (soporta campos anidados con notación de punto)
+// extractField extracts a field from the raw data map (supports nested fields with dot notation)
 func (a *OAuth2Authenticator) extractField(data map[string]interface{}, fieldPath string) string {
 	if fieldPath == "" {
 		return ""
 	}
 
-	// Para campos simples
+	// For simple fields
 	if val, ok := data[fieldPath]; ok {
 		return fmt.Sprint(val)
 	}
 
-	// Para campos anidados como "picture.data.url"
-	// Esta es una implementación simple, podrías hacerla más robusta
+	// For nested fields like "picture.data.url"
+	// This is a simple implementation, could be made more robust
 	return ""
 }
 
-// GetOAuthConfig retorna la configuración de OAuth2
+// GetOAuthConfig returns the OAuth2 configuration
 func (a *OAuth2Authenticator) GetOAuthConfig() *oauth2.Config {
 	return a.oauthConfig
 }
 
-// GetAuthURL genera la URL de autenticación
+// GetAuthURL generates the authentication URL
 func (a *OAuth2Authenticator) GetAuthURL(state string) string {
 	return a.oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
 }
 
-// ExchangeCode intercambia el código de autorización por un token
+// ExchangeCode exchanges the authorization code for a token
 func (a *OAuth2Authenticator) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
 	token, err := a.oauthConfig.Exchange(ctx, code)
 	if err != nil {
