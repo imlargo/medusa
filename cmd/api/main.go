@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/medusa/api/docs"
+	medusadocs "github.com/imlargo/medusa/pkg/medusa/core/docs"
+
 	"github.com/imlargo/medusa/internal/config"
 	"github.com/imlargo/medusa/internal/database"
 	"github.com/imlargo/medusa/internal/handlers"
@@ -18,14 +18,11 @@ import (
 	"github.com/imlargo/medusa/pkg/medusa/core/metrics"
 	"github.com/imlargo/medusa/pkg/medusa/core/ratelimiter"
 	"github.com/imlargo/medusa/pkg/medusa/core/repository"
-	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 	"github.com/imlargo/medusa/pkg/medusa/core/server/http"
 	"github.com/imlargo/medusa/pkg/medusa/core/service"
 	"github.com/imlargo/medusa/pkg/medusa/middleware"
 	"github.com/imlargo/medusa/pkg/medusa/services/cache"
 	"github.com/imlargo/medusa/pkg/medusa/services/storage"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -54,10 +51,8 @@ func main() {
 
 func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.Logger) {
 
-	// Ping
-	router.GET("/ping", func(c *gin.Context) {
-		responses.SuccessOK(c, "hello")
-	})
+	// Docs
+	medusadocs.RegisterDocs(router, cfg.Server.Host, cfg.Server.Port)
 
 	// Rate Limiter
 	if cfg.RateLimiter.Enabled {
@@ -116,8 +111,10 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	authTokenMiddleware := middleware.NewAuthTokenMiddleware(jwtAuth)
 	rateLimiterMiddleware := middleware.NewRateLimiterMiddleware(rl)
 	metricsMiddleware := middleware.NewMetricsMiddleware(metricsService)
+	corsMiddleware := middleware.NewCorsMiddleware(cfg.Server.Host, []string{})
 
 	// Handlers
+	router.Use(corsMiddleware)
 	router.GET("/health", healthHandler.Health)
 
 	v1 := router.Group("/v1")
@@ -135,35 +132,4 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	if cfg.RateLimiter.Enabled {
 		v1.Use(rateLimiterMiddleware)
 	}
-}
-
-func RegisterDocs(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.Logger) {
-
-	host := cfg.Server.Host
-	if IsLocalhostUrl(host) {
-		host += ":" + strconv.Itoa(cfg.Server.Port)
-	}
-
-	if IsHttps(host) {
-		docs.SwaggerInfo.Schemes = []string{"https"}
-	} else {
-		docs.SwaggerInfo.Schemes = []string{"http"}
-	}
-
-	docs.SwaggerInfo.Host = (host)
-	docs.SwaggerInfo.BasePath = "/"
-
-	schemaUrl := host
-	schemaUrl += "/docs/doc.json"
-
-	urlSwaggerJson := ginSwagger.URL(schemaUrl)
-	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, urlSwaggerJson))
-}
-
-func IsLocalhostUrl(host string) bool {
-	return host == "localhost"
-}
-
-func IsHttps(host string) bool {
-	return !IsLocalhostUrl(host)
 }

@@ -5,11 +5,16 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/imlargo/medusa/pkg/medusa/tools"
 )
 
 func NewCorsMiddleware(host string, origins []string) gin.HandlerFunc {
 
-	allowedOrigins := append(origins, host)
+	if origins == nil {
+		origins = []string{}
+	}
+
+	allowedOrigins := append(origins, tools.ToCompleteURL(host))
 
 	config := cors.Config{
 		AllowOrigins:  allowedOrigins,
