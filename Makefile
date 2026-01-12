@@ -11,4 +11,4 @@ format:
 	go fmt ./...
 
 run:
-	air
+	go run cmd/api/main.go
