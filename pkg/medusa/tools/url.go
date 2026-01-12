@@ -121,3 +121,17 @@ func ToCompleteURL(urlOrHost string) string {
 
 	return completeURL
 }
+
+func GetFullAppUrl(host string, port int) string {
+	host = CleanHostURL(host)
+
+	if IsLocalhost(host) {
+		return fmt.Sprintf("http://%s:%d", host, port)
+	}
+
+	return ToCompleteURL(host)
+}
+
+func GetFullDocsUrl(host string, port int) string {
+	return GetFullAppUrl(host, port) + "/docs/index.html"
+}

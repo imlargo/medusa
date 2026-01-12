@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	medusadocs "github.com/imlargo/medusa/pkg/medusa/core/docs"
+	"github.com/imlargo/medusa/pkg/medusa/tools"
 
 	"github.com/imlargo/medusa/internal/config"
 	"github.com/imlargo/medusa/internal/database"
@@ -45,6 +46,11 @@ func main() {
 	)
 
 	Mount(app, &cfg, router, logger)
+
+	println("...")
+	println("App running on: ", tools.GetFullAppUrl(cfg.Server.Host, cfg.Server.Port))
+	println("Docs running on: ", tools.GetFullDocsUrl(cfg.Server.Host, cfg.Server.Port))
+	println("...")
 
 	app.Run(context.Background())
 }
