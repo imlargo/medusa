@@ -29,9 +29,9 @@ const (
 	// Returns HTTP 400 status code.
 	ErrBadRequest ErrorCode = "BAD_REQUEST"
 
-	// ErrToManyRequests indicates the client has exceeded the rate limit.
+	// ErrTooManyRequests indicates the client has exceeded the rate limit.
 	// Returns HTTP 429 status code. Response should include retry-after information.
-	ErrToManyRequests ErrorCode = "TOO_MANY_REQUESTS"
+	ErrTooManyRequests ErrorCode = "TOO_MANY_REQUESTS"
 
 	// ErrUnauthorized indicates authentication is required or has failed.
 	// Returns HTTP 401 status code.
@@ -130,7 +130,7 @@ func ErrorBadRequest(c *gin.Context, message string) {
 //
 //	responses.ErrorTooManyRequests(c, "Rate limit exceeded. Try again in 60 seconds")
 func ErrorTooManyRequests(c *gin.Context, message string) {
-	WriteErrorResponse(c, http.StatusTooManyRequests, ErrToManyRequests, message, nil)
+	WriteErrorResponse(c, http.StatusTooManyRequests, ErrTooManyRequests, message, nil)
 }
 
 // ErrorUnauthorized writes a 401 Unauthorized response.

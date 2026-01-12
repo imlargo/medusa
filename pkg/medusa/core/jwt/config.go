@@ -13,7 +13,7 @@ type Config struct {
 // Returns an error if the secret is empty.
 func (cfg Config) Validate() error {
 	if cfg.Secret == "" {
-		return errors.New("secret cant be empty")
+		return errors.New("secret can't be empty")
 	}
 
 	return nil
