@@ -18,6 +18,7 @@ import (
 	"github.com/imlargo/go-api/pkg/medusa/core/responses"
 	"github.com/imlargo/go-api/pkg/medusa/core/server/http"
 	"github.com/imlargo/go-api/pkg/medusa/core/service"
+	"github.com/imlargo/go-api/pkg/medusa/middleware"
 	"github.com/imlargo/go-api/pkg/medusa/services/cache"
 	"github.com/imlargo/go-api/pkg/medusa/services/storage"
 )
@@ -57,7 +58,7 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	if cfg.RateLimiter.Enabled {
 		logger.Info("Rate Limiter is enabled")
 	}
-	_ = ratelimiter.NewTokenBucketLimiter(ratelimiter.Config{
+	rl := ratelimiter.NewTokenBucketLimiter(ratelimiter.Config{
 		RequestsPerTimeFrame: cfg.RateLimiter.RequestsPerTimeFrame,
 		TimeFrame:            cfg.RateLimiter.TimeFrame,
 	})
@@ -104,16 +105,22 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	authHandler := handlers.NewAuthHandler(baseHandler, authService)
 
 	// Middlewares
+	authTokenMiddleware := middleware.NewAuthTokenMiddleware(jwtAuth)
+	rateLimiterMiddleware := middleware.NewRateLimiterMiddleware(rl)
+
+	// Handlers
+	router.GET("/health", healthHandler.Health)
 
 	v1 := router.Group("/v1")
-	v1.GET("/health", healthHandler.Health)
 
 	{
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/login", authHandler.LoginWithPassword)
 			auth.POST("/register", authHandler.Register)
-			auth.GET("/user", authHandler.GetUser)
+			auth.GET("/user", authTokenMiddleware, authHandler.GetUser)
 		}
 	}
+
+	v1.Use(authTokenMiddleware, rateLimiterMiddleware)
 }

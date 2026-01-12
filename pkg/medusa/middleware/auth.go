@@ -4,11 +4,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/imlargo/go-api/pkg/medusa"
 	"github.com/imlargo/go-api/pkg/medusa/core/jwt"
 	"github.com/imlargo/go-api/pkg/medusa/core/responses"
 )
 
-func AuthTokenMiddleware(jwtAuthenticator *jwt.JWT) gin.HandlerFunc {
+func NewAuthTokenMiddleware(jwtAuthenticator *jwt.JWT) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authHeader := ctx.GetHeader("Authorization")
 
@@ -39,7 +40,7 @@ func AuthTokenMiddleware(jwtAuthenticator *jwt.JWT) gin.HandlerFunc {
 			return
 		}
 
-		ctx.Set("userID", tokenData.UserID)
+		ctx.Set(medusa.UserIDContextKey, tokenData.UserID)
 
 		ctx.Next()
 	}
