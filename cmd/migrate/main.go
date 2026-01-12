@@ -12,7 +12,6 @@ func main() {
 	db, err := database.NewPostgresDatabase(cfg.Database.URL)
 	if err != nil {
 		panic("Could not connect to the database: " + err.Error())
-		return
 	}
 
 	database.Migrate(db)

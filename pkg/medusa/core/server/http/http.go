@@ -121,10 +121,10 @@ func (s *Server) Start(ctx context.Context) error {
 // It waits up to 5 seconds for in-flight requests to complete before forcefully closing connections.
 //
 // The server will:
-//   1. Stop accepting new connections
-//   2. Wait for active requests to complete (up to 5 seconds)
-//   3. Close idle connections
-//   4. Return after shutdown completes
+//  1. Stop accepting new connections
+//  2. Wait for active requests to complete (up to 5 seconds)
+//  3. Close idle connections
+//  4. Return after shutdown completes
 //
 // If shutdown doesn't complete within the timeout, the server logs a fatal error
 // and terminates immediately.

@@ -11,10 +11,10 @@ import (
 // It maintains a separate rate limiter for each key (typically IP address or user ID).
 //
 // The token bucket algorithm works by:
-//   1. Starting with a full bucket of tokens (RequestsPerTimeFrame)
-//   2. Each request consumes one token
-//   3. Tokens are replenished at a steady rate (TimeFrame / RequestsPerTimeFrame)
-//   4. If no tokens are available, the request is rejected
+//  1. Starting with a full bucket of tokens (RequestsPerTimeFrame)
+//  2. Each request consumes one token
+//  3. Tokens are replenished at a steady rate (TimeFrame / RequestsPerTimeFrame)
+//  4. If no tokens are available, the request is rejected
 //
 // This implementation is thread-safe and automatically cleans up inactive entries
 // to prevent unbounded memory growth.
