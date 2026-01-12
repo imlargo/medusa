@@ -7,13 +7,13 @@ import (
 )
 
 type Service struct {
-	medusaservice.Service
+	*medusaservice.Service
 	store  *store.Store
 	config *config.Config
 }
 
 func NewService(
-	medusa medusaservice.Service,
+	medusa *medusaservice.Service,
 	store *store.Store,
 	config *config.Config,
 ) *Service {

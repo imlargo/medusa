@@ -6,13 +6,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/imlargo/go-api/internal/config"
 	"github.com/imlargo/go-api/internal/database"
+	"github.com/imlargo/go-api/internal/handlers"
+	"github.com/imlargo/go-api/internal/service"
 	"github.com/imlargo/go-api/internal/store"
 	"github.com/imlargo/go-api/pkg/medusa/core/app"
+	"github.com/imlargo/go-api/pkg/medusa/core/handler"
+	"github.com/imlargo/go-api/pkg/medusa/core/jwt"
 	"github.com/imlargo/go-api/pkg/medusa/core/logger"
 	"github.com/imlargo/go-api/pkg/medusa/core/ratelimiter"
 	medusarepo "github.com/imlargo/go-api/pkg/medusa/core/repository"
 	"github.com/imlargo/go-api/pkg/medusa/core/responses"
 	"github.com/imlargo/go-api/pkg/medusa/core/server/http"
+	medusaservice "github.com/imlargo/go-api/pkg/medusa/core/service"
 	"github.com/imlargo/go-api/pkg/medusa/services/cache"
 	"github.com/imlargo/go-api/pkg/medusa/services/storage"
 )
@@ -36,12 +41,12 @@ func main() {
 		app.WithServer(srv),
 	)
 
-	Mount(app, cfg, router, logger)
+	Mount(app, &cfg, router, logger)
 
 	app.Run(context.Background())
 }
 
-func Mount(app *app.App, cfg config.Config, router *gin.Engine, logger *logger.Logger) {
+func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.Logger) {
 
 	// Ping
 	router.GET("/ping", func(c *gin.Context) {
@@ -56,6 +61,8 @@ func Mount(app *app.App, cfg config.Config, router *gin.Engine, logger *logger.L
 		RequestsPerTimeFrame: cfg.RateLimiter.RequestsPerTimeFrame,
 		TimeFrame:            cfg.RateLimiter.TimeFrame,
 	})
+
+	jwtAuth := jwt.NewJwt(jwt.Config{})
 
 	// Database
 	db, err := database.NewPostgresDatabase(cfg.Database.URL)
@@ -83,5 +90,26 @@ func Mount(app *app.App, cfg config.Config, router *gin.Engine, logger *logger.L
 
 	// Repositories
 	medusaStore := medusarepo.NewStore(db, logger)
-	_ = store.NewStore(medusaStore)
+	store := store.NewStore(medusaStore)
+
+	baseService := medusaservice.NewService(logger)
+	serviceContainer := service.NewService(baseService, store, cfg)
+	userService := service.NewUserService(serviceContainer)
+	authService := service.NewAuthService(serviceContainer, userService, jwtAuth)
+
+	// Handlers
+	baseHander := handler.NewHandler(logger)
+	authHandler := handlers.NewAuthHandler(baseHander, authService)
+
+	// Middlewares
+
+	v1 := router.Group("/v1")
+	{
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/login", authHandler.LoginWithPassword)
+			auth.POST("/register", authHandler.Register)
+			auth.GET("/user", authHandler.GetUser)
+		}
+	}
 }
