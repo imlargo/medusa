@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/go-api/pkg/medusa/core/handler"
-	"github.com/imlargo/go-api/pkg/medusa/core/responses"
-	"github.com/imlargo/go-api/pkg/medusa/services/sse"
+	"github.com/imlargo/medusa/pkg/medusa/core/handler"
+	"github.com/imlargo/medusa/pkg/medusa/core/responses"
+	"github.com/imlargo/medusa/pkg/medusa/services/sse"
 )
 
 type Handler struct {

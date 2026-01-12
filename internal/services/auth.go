@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imlargo/go-api/internal/dto"
-	"github.com/imlargo/go-api/internal/models"
-	"github.com/imlargo/go-api/pkg/medusa/core/jwt"
+	"github.com/imlargo/medusa/internal/dto"
+	"github.com/imlargo/medusa/internal/models"
+	"github.com/imlargo/medusa/pkg/medusa/core/jwt"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )

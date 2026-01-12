@@ -1,9 +1,9 @@
 package services
 
 import (
-	"github.com/imlargo/go-api/internal/config"
-	"github.com/imlargo/go-api/internal/store"
-	"github.com/imlargo/go-api/pkg/medusa/core/service"
+	"github.com/imlargo/medusa/internal/config"
+	"github.com/imlargo/medusa/internal/store"
+	"github.com/imlargo/medusa/pkg/medusa/core/service"
 )
 
 type Service struct {

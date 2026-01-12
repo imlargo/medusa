@@ -6,12 +6,12 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/go-api/internal/config"
-	"github.com/imlargo/go-api/internal/handlers"
-	"github.com/imlargo/go-api/pkg/medusa/core/app"
-	"github.com/imlargo/go-api/pkg/medusa/core/handler"
-	"github.com/imlargo/go-api/pkg/medusa/core/logger"
-	"github.com/imlargo/go-api/pkg/medusa/core/server/http"
+	"github.com/imlargo/medusa/internal/config"
+	"github.com/imlargo/medusa/internal/handlers"
+	"github.com/imlargo/medusa/pkg/medusa/core/app"
+	"github.com/imlargo/medusa/pkg/medusa/core/handler"
+	"github.com/imlargo/medusa/pkg/medusa/core/logger"
+	"github.com/imlargo/medusa/pkg/medusa/core/server/http"
 )
 
 func main() {

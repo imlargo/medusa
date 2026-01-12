@@ -3,9 +3,9 @@ package config
 import (
 	"time"
 
-	"github.com/imlargo/go-api/pkg/medusa/core/app"
-	"github.com/imlargo/go-api/pkg/medusa/core/env"
-	"github.com/imlargo/go-api/pkg/medusa/services/storage"
+	"github.com/imlargo/medusa/pkg/medusa/core/app"
+	"github.com/imlargo/medusa/pkg/medusa/core/env"
+	"github.com/imlargo/medusa/pkg/medusa/services/storage"
 )
 
 type Config struct {

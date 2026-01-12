@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/go-api/internal/dto"
-	"github.com/imlargo/go-api/internal/services"
-	"github.com/imlargo/go-api/pkg/medusa/core/handler"
-	"github.com/imlargo/go-api/pkg/medusa/core/responses"
+	"github.com/imlargo/medusa/internal/dto"
+	"github.com/imlargo/medusa/internal/services"
+	"github.com/imlargo/medusa/pkg/medusa/core/handler"
+	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 )
 
 type AuthHandler struct {

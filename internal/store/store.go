@@ -1,8 +1,8 @@
 package store
 
 import (
-	"github.com/imlargo/go-api/internal/repositories"
-	medusarepo "github.com/imlargo/go-api/pkg/medusa/core/repository"
+	"github.com/imlargo/medusa/internal/repositories"
+	medusarepo "github.com/imlargo/medusa/pkg/medusa/core/repository"
 )
 
 type Store struct {

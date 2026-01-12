@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/imlargo/go-api/internal/dto"
-	"github.com/imlargo/go-api/internal/models"
+	"github.com/imlargo/medusa/internal/dto"
+	"github.com/imlargo/medusa/internal/models"
 	"golang.org/x/crypto/bcrypt"
 )
 

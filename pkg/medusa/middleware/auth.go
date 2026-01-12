@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/go-api/pkg/medusa"
-	"github.com/imlargo/go-api/pkg/medusa/core/jwt"
-	"github.com/imlargo/go-api/pkg/medusa/core/responses"
+	"github.com/imlargo/medusa/pkg/medusa"
+	"github.com/imlargo/medusa/pkg/medusa/core/jwt"
+	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 )
 
 func NewAuthTokenMiddleware(jwtAuthenticator *jwt.JWT) gin.HandlerFunc {

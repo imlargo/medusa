@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/go-api/pkg/medusa/core/ratelimiter"
-	"github.com/imlargo/go-api/pkg/medusa/core/responses"
+	"github.com/imlargo/medusa/pkg/medusa/core/ratelimiter"
+	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 )
 
 func NewRateLimiterMiddleware(rl ratelimiter.RateLimiter) gin.HandlerFunc {

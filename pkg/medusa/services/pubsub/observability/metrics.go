@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/imlargo/go-api/pkg/medusa/core/logger"
-	"github.com/imlargo/go-api/pkg/medusa/services/pubsub"
+	"github.com/imlargo/medusa/pkg/medusa/core/logger"
+	"github.com/imlargo/medusa/pkg/medusa/services/pubsub"
 )
 
 type Span interface {

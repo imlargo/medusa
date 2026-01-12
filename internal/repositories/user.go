@@ -3,8 +3,8 @@ package repositories
 import (
 	"context"
 
-	"github.com/imlargo/go-api/internal/models"
-	"github.com/imlargo/go-api/pkg/medusa/core/repository"
+	"github.com/imlargo/medusa/internal/models"
+	"github.com/imlargo/medusa/pkg/medusa/core/repository"
 )
 
 type UserRepository interface {
