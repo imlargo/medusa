@@ -98,12 +98,16 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 	authService := services.NewAuthService(serviceContainer, userService, jwtAuth)
 
 	// Handlers
-	baseHander := handler.NewHandler(logger)
-	authHandler := handlers.NewAuthHandler(baseHander, authService)
+	baseHandler := handler.NewHandler(logger)
+
+	healthHandler := handler.NewHealthHandler(baseHandler)
+	authHandler := handlers.NewAuthHandler(baseHandler, authService)
 
 	// Middlewares
 
 	v1 := router.Group("/v1")
+	v1.GET("/health", healthHandler.Health)
+
 	{
 		auth := v1.Group("/auth")
 		{
