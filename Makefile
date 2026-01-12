@@ -1,4 +1,4 @@
-.PHONY: swag format
+.PHONY: swag format run build vet
 
 SWAG_BIN=~/go/bin/swag
 MAIN_FILE=cmd/api/main.go
@@ -12,3 +12,9 @@ format:
 
 run:
 	go run cmd/api/main.go
+
+build:
+	go build -o ./tmp/main ./cmd/api
+
+vet:
+	go vet ./...

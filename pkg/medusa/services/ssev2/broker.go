@@ -160,14 +160,14 @@ func (b *Broker) SetPubSub(ps pubsub.MessageBroker) error {
 	// For RabbitMQ, this requires proper exchange configuration (e.g., topic exchange with "#" pattern).
 	// If wildcard subscription fails, topics must be subscribed to individually via SubscribeToTopic.
 	err := ps.Subscribe(b.ctx, "*", b.handlePubSubMessage)
-	
+
 	// If wildcard subscription fails, clear broker reference and return error
 	// Caller should subscribe to specific topics using SubscribeToTopic
 	if err != nil {
 		b.pubsubBroker = nil
 		return fmt.Errorf("wildcard subscription not supported by this broker: use SubscribeToTopic() for each specific topic instead: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -176,7 +176,7 @@ func (b *Broker) SubscribeToTopic(topic string) error {
 	if b.pubsubBroker == nil {
 		return fmt.Errorf("pubsub broker not configured")
 	}
-	
+
 	return b.pubsubBroker.Subscribe(b.ctx, topic, b.handlePubSubMessage)
 }
 
