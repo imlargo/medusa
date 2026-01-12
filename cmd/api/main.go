@@ -127,5 +127,8 @@ func Mount(app *app.App, cfg *config.Config, router *gin.Engine, logger *logger.
 		}
 	}
 
-	v1.Use(authTokenMiddleware, rateLimiterMiddleware, metricsMiddleware)
+	v1.Use(authTokenMiddleware, metricsMiddleware)
+	if cfg.RateLimiter.Enabled {
+		v1.Use(rateLimiterMiddleware)
+	}
 }
