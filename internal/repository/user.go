@@ -8,7 +8,7 @@ import (
 )
 
 type UserRepository interface {
-	medusarepo.CrudInteface[models.User]
+	medusarepo.WithCrud[models.User]
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
 }
 
