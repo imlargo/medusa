@@ -2,6 +2,11 @@ package dto
 
 import "github.com/imlargo/go-api/internal/models"
 
+type LoginWithPassword struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=8"`
+}
+
 type AuthResponse struct {
 	User   models.User `json:"user"`
 	Tokens AuthTokens  `json:"tokens"`

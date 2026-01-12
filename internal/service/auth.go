@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"github.com/imlargo/go-api/internal/dto"
+	"github.com/imlargo/go-api/internal/models"
 	"github.com/imlargo/go-api/pkg/medusa/core/jwt"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type AuthService interface {
+	GetUser(userID uint) (*models.User, error)
 	LoginWithPassword(email, password string) (*dto.AuthResponse, error)
 	RegisterWithPassword(user *dto.RegisterUser) (*dto.AuthResponse, error)
 }
@@ -29,6 +31,15 @@ func NewAuthService(container *Service, userSrv UserService, jwtAuth *jwt.JWT) A
 		userService: userSrv,
 		jwtAuth:     jwtAuth,
 	}
+}
+
+func (s *authService) GetUser(userID uint) (*models.User, error) {
+	user, err := s.store.Users.Get(context.Background(), userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
 
 func (s *authService) LoginWithPassword(email, password string) (*dto.AuthResponse, error) {
