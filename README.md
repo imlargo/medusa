@@ -381,12 +381,14 @@ import (
 subscriber := pubsub.NewRabbitMQSubscriber(config)
 
 // Apply middleware chain
-handler := middleware.Chain(
+middlewares := pubsub.MiddlewareChain{
     middleware.LoggingMiddleware(logger),
     middleware.RecoveryMiddleware(logger),
-    middleware.RetryMiddleware(3, time.Second),
     middleware.TimeoutMiddleware(30 * time.Second),
-)(func(ctx context.Context, msg *pubsub.Message) error {
+    middleware.MetricsMiddleware(metrics),
+}
+
+handler := middlewares.Apply(func(ctx context.Context, msg *pubsub.Message) error {
     // Process message
     return nil
 })
