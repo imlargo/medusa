@@ -24,12 +24,12 @@ Medusa is a **production-ready framework** for Go that eliminates the tedious se
 
 ### Built for
 
-- ✅ REST APIs with authentication, validation, and rate limiting
-- ✅ Real-time systems with SSE, WebSockets, and pub/sub
-- ✅ Microservices architectures with clean boundaries
+- ✅ REST APIs with JWT/OAuth2 authentication, validation, and rate limiting
+- ✅ Real-time systems with SSE (v1 & v2), WebSockets, and pub/sub
+- ✅ Microservices architectures with clean boundaries and enterprise patterns
 - ✅ SaaS platforms with storage, email, and notifications
-- ✅ Event-driven applications with message queues
-- ✅ Scalable backends with observability and metrics
+- ✅ Event-driven applications with message queues, CQRS, and sagas
+- ✅ Scalable backends with observability, metrics, and distributed tracing
 
 ### Design Philosophy
 
