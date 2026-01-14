@@ -24,12 +24,12 @@ Medusa is a **production-ready framework** for Go that eliminates the tedious se
 
 ### Built for
 
-- ✅ REST APIs with authentication, validation, and rate limiting
-- ✅ Real-time systems with SSE, WebSockets, and pub/sub
-- ✅ Microservices architectures with clean boundaries
+- ✅ REST APIs with JWT/OAuth2 authentication, validation, and rate limiting
+- ✅ Real-time systems with SSE (v1 & v2), WebSockets, and pub/sub
+- ✅ Microservices architectures with clean boundaries and enterprise patterns
 - ✅ SaaS platforms with storage, email, and notifications
-- ✅ Event-driven applications with message queues
-- ✅ Scalable backends with observability and metrics
+- ✅ Event-driven applications with message queues, CQRS, and sagas
+- ✅ Scalable backends with observability, metrics, and distributed tracing
 
 ### Design Philosophy
 
@@ -55,6 +55,7 @@ Medusa is a **production-ready framework** for Go that eliminates the tedious se
 ### Authentication & Security
 
 - **🔐 JWT Authentication** Token generation, validation, and refresh tokens
+- **🌐 OAuth2 Support** Generic OAuth2 provider with customizable field mapping
 - **🔑 API Key Auth** Header and Bearer token strategies
 - **🛡️ CORS** Configurable cross-origin policies
 - **⏱️ Rate Limiting** Token bucket algorithm with per-IP limiting
@@ -66,9 +67,14 @@ Medusa is a **production-ready framework** for Go that eliminates the tedious se
 - **📦 Storage** Multi-provider file storage (S3, Cloudflare R2) with presigned URLs
 - **📧 Email** Transactional email via Resend
 - **🔔 Push Notifications** Web Push API integration
-- **📡 Server-Sent Events** Real-time server-to-client streaming with client management
-- **🐰 PubSub** RabbitMQ message queue with publisher/subscriber pattern
+- **📡 Server-Sent Events (v1 & v2)** Real-time server-to-client streaming with client management, event replay, and broker architecture
+- **🐰 PubSub** Advanced message queue system with RabbitMQ
+  - Publisher/Subscriber pattern with middleware support
+  - Enterprise patterns: CQRS, Saga, Event Sourcing, Outbox, Request-Reply, Priority Queue, Batch processing
+  - Built-in observability with metrics and tracing
+  - Multiple serializers and retry mechanisms
 - **🗃️ Database** PostgreSQL with GORM and automatic migrations
+- **📚 API Documentation** Automatic Swagger/OpenAPI documentation generation
 
 ---
 
@@ -246,6 +252,191 @@ emailService.SendEmail(&email.SendEmailParams{
 })
 ```
 
+#### OAuth2 Authentication
+
+```go
+import (
+    "github.com/imlargo/medusa/pkg/medusa/core/auth/oauth"
+    "golang.org/x/oauth2"
+    "golang.org/x/oauth2/google"
+)
+
+// Configure OAuth2
+oauthConfig := &oauth2.Config{
+    ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+    ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+    RedirectURL:  "http://localhost:8080/auth/callback",
+    Endpoint:     google.Endpoint,
+}
+
+// Use generic provider
+provider := oauth.GoogleProvider // or oauth.GitHubProvider, etc.
+authenticator := oauth.NewGenericAuthenticator(oauthConfig, provider)
+
+// In your callback handler
+token, _ := oauthConfig.Exchange(ctx, code)
+user, _ := authenticator.GetUser(token)
+
+fmt.Println(user.Email, user.Name, user.Picture)
+```
+
+#### Advanced PubSub Patterns
+
+##### CQRS (Command Query Responsibility Segregation)
+
+```go
+import "github.com/imlargo/medusa/pkg/medusa/services/pubsub/patterns"
+
+// Command Bus
+commandBus := patterns.NewCommandBus(broker)
+
+// Define a command handler
+type CreateUserHandler struct{}
+
+func (h *CreateUserHandler) Handle(ctx context.Context, cmd *patterns.Command) error {
+    // Handle command
+    return nil
+}
+
+func (h *CreateUserHandler) CommandType() string {
+    return "CreateUser"
+}
+
+commandBus.RegisterHandler(&CreateUserHandler{})
+
+// Send command
+command := &patterns.Command{
+    ID:          "cmd-123",
+    Type:        "CreateUser",
+    AggregateID: "user-456",
+    Data:        jsonData,
+}
+commandBus.Send(ctx, command)
+
+// Query Bus for reads
+queryBus := patterns.NewQueryBus()
+result, _ := queryBus.Execute(ctx, &patterns.Query{
+    Type:   "GetUserById",
+    Params: map[string]interface{}{"id": "user-456"},
+})
+```
+
+##### Saga Pattern (Distributed Transactions)
+
+```go
+import "github.com/imlargo/medusa/pkg/medusa/services/pubsub/patterns"
+
+saga := patterns.NewSaga("order-saga-123", publisher)
+
+saga.AddStep(&patterns.SagaStep{
+    Name: "ReserveInventory",
+    Action: func(ctx context.Context, data interface{}) error {
+        return reserveInventory(ctx, data)
+    },
+    Compensation: func(ctx context.Context, data interface{}) error {
+        return releaseInventory(ctx, data)
+    },
+}).AddStep(&patterns.SagaStep{
+    Name: "ProcessPayment",
+    Action: func(ctx context.Context, data interface{}) error {
+        return processPayment(ctx, data)
+    },
+    Compensation: func(ctx context.Context, data interface{}) error {
+        return refundPayment(ctx, data)
+    },
+})
+
+// Execute saga with automatic compensation on failure
+err := saga.Execute(ctx, orderData)
+```
+
+##### Outbox Pattern (Transactional Messaging)
+
+```go
+import "github.com/imlargo/medusa/pkg/medusa/services/pubsub/patterns"
+
+// Outbox ensures messages are sent reliably
+outboxProcessor := patterns.NewOutboxProcessor(outboxStore, publisher, config)
+
+// Add message to outbox (within a transaction)
+outboxStore.Add(ctx, &patterns.OutboxMessage{
+    ID:      "msg-123",
+    Topic:   "user.created",
+    Payload: userData,
+    Status:  patterns.OutboxStatusPending,
+})
+
+// Start processor (runs in background)
+go outboxProcessor.Start(ctx)
+```
+
+#### PubSub with Middleware
+
+```go
+import (
+    "github.com/imlargo/medusa/pkg/medusa/services/pubsub"
+    "github.com/imlargo/medusa/pkg/medusa/services/pubsub/middleware"
+)
+
+subscriber := pubsub.NewRabbitMQSubscriber(config)
+
+// Apply middleware chain
+middlewares := pubsub.MiddlewareChain{
+    middleware.LoggingMiddleware(logger),
+    middleware.RecoveryMiddleware(logger),
+    middleware.TimeoutMiddleware(30 * time.Second),
+    middleware.MetricsMiddleware(metrics),
+}
+
+handler := middlewares.Apply(func(ctx context.Context, msg *pubsub.Message) error {
+    // Process message
+    return nil
+})
+
+subscriber.Subscribe(ctx, "events.*", handler)
+```
+
+#### SSE v2 with Event Replay
+
+```go
+import "github.com/imlargo/medusa/pkg/medusa/services/ssev2"
+
+// Create broker with event store
+config := ssev2.DefaultConfig()
+config.EnableReplay = true
+broker := ssev2.NewBroker(config)
+
+// Client subscribes to topic
+client := broker.Subscribe(ctx, "notifications", "client-123")
+
+// Stream events to client
+router.GET("/events", func(c *gin.Context) {
+    lastEventID := c.GetHeader("Last-Event-ID")
+    
+    // Replay missed events
+    if lastEventID != "" {
+        events, _ := broker.GetEventsSince("notifications", lastEventID)
+        for _, event := range events {
+            writer := ssev2.NewWriter(c.Writer)
+            writer.Write(event)
+        }
+    }
+    
+    // Stream new events
+    for event := range client.GetChannel() {
+        writer := ssev2.NewWriter(c.Writer)
+        writer.Write(event)
+    }
+})
+
+// Publish event with persistence
+broker.Publish("notifications", ssev2.Event{
+    ID:    "evt-123",
+    Event: "notification",
+    Data:  gin.H{"message": "Hello"},
+})
+```
+
 ---
 
 ## Architecture
@@ -256,6 +447,7 @@ Medusa follows **Clean Architecture** principles with a pragmatic twist structur
 .
 ├── cmd/                       # Application entry points
 │   ├── api/                  # Main HTTP server
+│   ├── migrate/              # Database migration tool
 │   ├── sse/                  # Dedicated SSE server (optional)
 │   └── worker/               # Background workers (future)
 │
@@ -271,6 +463,9 @@ Medusa follows **Clean Architecture** principles with a pragmatic twist structur
 └── pkg/medusa/               # 🪼 THE FRAMEWORK (reusable)
     ├── core/                 # Core components
     │   ├── app/             # Application lifecycle
+    │   ├── auth/            # Authentication
+    │   │   └── oauth/       # OAuth2 provider
+    │   ├── docs/            # API documentation helpers
     │   ├── env/             # Environment utilities
     │   ├── handler/         # Base handler
     │   ├── jwt/             # JWT auth
@@ -279,10 +474,11 @@ Medusa follows **Clean Architecture** principles with a pragmatic twist structur
     │   ├── ratelimiter/     # Rate limiting
     │   ├── repository/      # Repository pattern
     │   ├── responses/       # HTTP response helpers
-    │   └── server/          # Server abstractions
+    │   ├── server/          # Server abstractions
+    │   └── service/         # Service base
     │
     ├── middleware/           # HTTP middleware
-    │   ├── auth. go          # JWT authentication
+    │   ├── auth.go          # JWT authentication
     │   ├── api_key.go       # API key auth
     │   ├── cors.go          # CORS policies
     │   ├── metrics.go       # Metrics collection
@@ -293,11 +489,17 @@ Medusa follows **Clean Architecture** principles with a pragmatic twist structur
     │   ├── email/           # Email service
     │   ├── notification/    # Push notifications
     │   ├── pubsub/          # Message queue
-    │   ├── sse/             # Server-Sent Events
+    │   │   ├── middleware/  # PubSub middleware
+    │   │   ├── observability/ # Metrics & tracing
+    │   │   ├── patterns/    # Enterprise patterns
+    │   │   ├── rabbitmq/    # RabbitMQ implementation
+    │   │   └── serializers/ # Message serialization
+    │   ├── sse/             # Server-Sent Events (v1)
+    │   ├── ssev2/           # Server-Sent Events v2 (enhanced)
     │   └── storage/         # File storage
     │
     └── tools/                # Utilities
-        ├── bind. go          # Data binding helpers
+        ├── bind.go          # Data binding helpers
         └── url.go           # URL utilities
 ```
 
@@ -444,6 +646,11 @@ JWT_SECRET=your-secret-key-change-this
 JWT_TOKEN_EXPIRATION=15m
 JWT_REFRESH_EXPIRATION=168h
 
+# OAuth2 (Google example)
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URL=http://localhost:8080/auth/callback
+
 # Rate Limiting
 RATE_LIMITER_ENABLED=true
 RATE_LIMITER_REQUESTS_PER_TIME_FRAME=100
@@ -544,17 +751,17 @@ make dev
 # Format code
 make format
 
-# Run tests
-make test
-
 # Build binary
 make build
 
-# Generate Swagger docs
-make swag
+# Run vet
+make vet
 
-# Clean build artifacts
-make clean
+# Generate Swagger docs
+make docs
+
+# Run database migrations
+go run cmd/migrate/main.go
 ```
 
 ---
@@ -591,20 +798,37 @@ func TestPingHandler(t *testing.T) {
 
 ## Roadmap
 
-### ✅ v0.1 - Foundation (Current)
+### ✅ v0.1 - Foundation (Completed)
 
 - [x] Core framework (app, server, logger)
 - [x] JWT & API key authentication
+- [x] OAuth2 authentication support
 - [x] Repository pattern with GORM
 - [x] Redis cache
 - [x] File storage (S3/R2)
-- [x] Server-Sent Events
+- [x] Server-Sent Events (v1 & v2)
 - [x] PubSub with RabbitMQ
+- [x] Advanced PubSub patterns (CQRS, Saga, Event Sourcing, Outbox, etc.)
+- [x] PubSub middleware and observability
 - [x] Email & push notifications
 - [x] Rate limiting & CORS
 - [x] Prometheus metrics
+- [x] Database migration tool
+- [x] Data binding utilities
 
-### 🚧 v0.2 - Developer Experience
+### ✅ v0.2 - Developer Experience (Completed)
+
+- [x] Hot reload with Air
+- [x] Migration command tool
+- [x] Request utilities and helpers
+
+### ✅ v0.3 - Validation & Documentation (Completed)
+
+- [x] Swagger/OpenAPI documentation
+- [x] Automatic API documentation generation
+- [x] Swagger UI at `/docs`
+
+### 🚧 v0.4 - Enhanced Developer Experience (In Progress)
 
 - [ ] Comprehensive documentation
 - [ ] Example applications
@@ -614,16 +838,7 @@ func TestPingHandler(t *testing.T) {
 - [ ] Docker Compose setup
 - [ ] CI/CD examples
 
-### 🎯 v0.3 - Validation & Documentation
-
-- [ ] Automatic request validation
-- [ ] Declarative validation tags
-- [ ] OpenAPI 3.0 generation
-- [ ] Swagger UI at `/docs`
-- [ ] ReDoc integration
-- [ ] Auto-generated examples
-
-### 🎯 v0.4 - Type Safety & Ergonomics
+### 🎯 v0.5 - Type Safety & Ergonomics
 
 - [ ] Enhanced `medusa.Context` with helpers
 - [ ] Type-safe handlers with generics
@@ -631,8 +846,10 @@ func TestPingHandler(t *testing.T) {
 - [ ] Automatic pagination
 - [ ] Query filter builders
 - [ ] File upload helpers
+- [ ] Automatic request validation
+- [ ] Declarative validation tags
 
-### 🎯 v0.5 - CLI & Generators
+### 🎯 v0.6 - CLI & Generators
 
 - [ ] `medusa` CLI tool
 - [ ] Project scaffolding
@@ -640,7 +857,7 @@ func TestPingHandler(t *testing.T) {
 - [ ] Migration management
 - [ ] Custom templates
 
-### 🎯 v0.6 - Testing Framework
+### 🎯 v0.7 - Testing Framework
 
 - [ ] Built-in testing utilities
 - [ ] Test database helpers
@@ -648,7 +865,7 @@ func TestPingHandler(t *testing.T) {
 - [ ] Mock generators
 - [ ] Fixture factories
 
-### 🎯 v0.7 - Background Processing
+### 🎯 v0.8 - Background Processing
 
 - [ ] Job queue system
 - [ ] Scheduled tasks (cron)
@@ -656,7 +873,7 @@ func TestPingHandler(t *testing.T) {
 - [ ] Retry policies
 - [ ] Job monitoring
 
-### 🎯 v0.8 - Advanced Observability
+### 🎯 v0.9 - Advanced Observability
 
 - [ ] OpenTelemetry integration
 - [ ] Distributed tracing
@@ -664,7 +881,7 @@ func TestPingHandler(t *testing.T) {
 - [ ] Error tracking
 - [ ] Performance profiling
 
-### 🎯 v0.9 - WebSockets
+### 🎯 v0.10 - WebSockets
 
 - [ ] Native WebSocket support
 - [ ] Rooms & namespaces
