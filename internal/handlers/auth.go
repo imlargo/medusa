@@ -86,13 +86,14 @@ func (a *AuthHandler) Register(c *gin.Context) {
 // @Failure		500	{object}	responses.ErrorResponse	"Internal Server Error
 // @Security     BearerAuth
 func (a *AuthHandler) GetUser(c *gin.Context) {
-	userID, exists := c.Get(medusa.UserIDContextKey)
+
+	userID, exists := medusa.GetUserID(c)
 	if !exists {
 		responses.ErrorUnauthorized(c, "User not authenticated")
 		return
 	}
 
-	user, err := a.authService.GetUser(userID.(uint))
+	user, err := a.authService.GetUser(userID)
 	if err != nil {
 		responses.ErrorInternalServerWithMessage(c, err.Error(), nil)
 		return
