@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 	"github.com/imlargo/medusa/internal/dto"
 	_ "github.com/imlargo/medusa/internal/models"
@@ -40,7 +42,7 @@ func (a *AuthHandler) LoginWithPassword(c *gin.Context) {
 		return
 	}
 
-	authResponse, err := a.authService.LoginWithPassword(payload.Email, payload.Password)
+	authResponse, err := a.authService.LoginWithPassword(context.Background(), payload.Email, payload.Password)
 	if err != nil {
 		responses.ErrorInternalServerWithMessage(c, err.Error(), nil)
 		return
@@ -67,7 +69,7 @@ func (a *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	authData, err := a.authService.RegisterWithPassword(&payload)
+	authData, err := a.authService.RegisterWithPassword(context.Background(), &payload)
 	if err != nil {
 		responses.ErrorInternalServerWithMessage(c, err.Error(), nil)
 		return
@@ -93,7 +95,7 @@ func (a *AuthHandler) GetUser(c *gin.Context) {
 		return
 	}
 
-	user, err := a.authService.GetUser(userID)
+	user, err := a.authService.GetUser(context.Background(), userID)
 	if err != nil {
 		responses.ErrorInternalServerWithMessage(c, err.Error(), nil)
 		return
