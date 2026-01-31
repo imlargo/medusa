@@ -243,7 +243,7 @@ const docTemplate = `{
                 "ErrNotFound",
                 "ErrInternalServer",
                 "ErrBadRequest",
-                "ErrToManyRequests",
+                "ErrTooManyRequests",
                 "ErrUnauthorized"
             ]
         },
@@ -251,13 +251,22 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "code": {
-                    "$ref": "#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorCode"
+                    "description": "Machine-readable error code",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorCode"
+                        }
+                    ]
                 },
-                "details": {},
+                "details": {
+                    "description": "Optional error details (e.g., validation errors)"
+                },
                 "error": {
+                    "description": "Human-readable error message",
                     "type": "string"
                 },
                 "status": {
+                    "description": "HTTP status code (e.g., 400, 404, 500)",
                     "type": "integer"
                 }
             }
