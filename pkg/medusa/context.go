@@ -14,6 +14,19 @@ const (
 	ContextStartTimeKey = "medusa_start_time"
 )
 
+// Helpers type-safe
+func GetUserID(c *gin.Context) (uint, bool) {
+	id, exists := c.Get(ContextUserIDKey)
+	if !exists {
+		return 0, false
+	}
+	return id.(uint), true
+}
+
+func SetUserID(c *gin.Context, id uint) {
+	c.Set(ContextUserIDKey, id)
+}
+
 // Context wraps gin.Context with additional helpers.
 // It provides a cleaner API for common operations while
 // maintaining full access to the underlying Gin context.
