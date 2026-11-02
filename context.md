@@ -44,6 +44,13 @@ Pending:
 - Tag the core `v0.1.0` (`v0.0.1` is the old layout), then `postgres/v0.1.0` and `auth/v0.1.0`; `auth` drops its `replace` once the core is tagged.
 - A CI pipeline: vet, test with `-race`, govulncheck, image build, and a Postgres service with `REQUIRE_DB_TESTS=1`.
 
+Then the error and business rule standard (2026-11-02, ADR 0003):
+
+- Core package `apperr`: errors with a kind and a `domain.rule` code, independent of HTTP.
+- Errors are sent as RFC 9457 problem details. This breaks the error contract for existing clients: `error` and `details` became `detail` and `errors`, and codes changed (`NOT_FOUND` -> `user.not_found`).
+- The app is organized by feature: `user`, `account`, `events`.
+- Registration now requires `email` (valid format) and `password`. No password policy exists beyond that; deciding one is a product decision.
+
 ## Batteries roadmap
 
 1. Done: `postgres`, `auth`.
@@ -57,9 +64,8 @@ Known gap in `auth`: access and refresh tokens are indistinguishable, so a refre
 
 Applying the research to the whole codebase:
 
-- API contracts: problem+json errors, cursor pagination, Idempotency-Key.
+- API contracts: cursor pagination, Idempotency-Key, a page per error code (the problem `type`) or a generated catalog of codes.
 - Hardening: read, write and idle timeouts in `httpserver`, `http.CrossOriginProtection`.
 - Observability: OpenTelemetry, an admin port for pprof, metrics and health, signal handling in `main`.
 - Tooling: golangci-lint v2, a swaggo replacement.
 - An outbound HTTP client in Medusa (timeout and ctx always, capped bodies, typed status errors, opt-in idempotent retries). butter rebuilt one in about a dozen packages.
-- App code: services returning domain errors instead of `httperr`, packages by feature instead of by layer.

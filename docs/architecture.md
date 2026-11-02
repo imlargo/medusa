@@ -9,7 +9,7 @@ flowchart LR
     subgraph app["app/ (github.com/imlargo/medusa/app)"]
         cmd["cmd/api, cmd/migrate"]
         bootstrap["bootstrap: container, routes"]
-        domain["handlers, services, repositories"]
+        features["features: user, account, events"]
         infra["config, migrations, queries, sqlc"]
     end
     subgraph batteries["batteries (one module each)"]
@@ -18,7 +18,7 @@ flowchart LR
     end
     subgraph medusa["/ core (github.com/imlargo/medusa)"]
         edge["medusa, middleware, health handlers (Gin)"]
-        core["httperr, httpserver, lifecycle, job, metrics, storage (stdlib types)"]
+        core["apperr, httperr, httpserver, lifecycle, job, metrics, storage (stdlib types)"]
     end
     app --> batteries
     app --> medusa
@@ -28,26 +28,32 @@ flowchart LR
 
 - **The core** knows HTTP, errors, lifecycle, health, metrics and object storage. It knows nothing about users, databases or configuration.
 - **The batteries** each wrap one integration: `postgres` the pool, migrations and test databases, `auth` JWT tokens and the middleware. An app pays for a battery's dependencies only if it imports it.
-- **The app** owns everything specific to this product: its schema, queries, repositories, config and routes. It imports Medusa's public packages and nothing else from it.
+- **The app** owns everything specific to this product: its features, schema, queries, config and routes. It imports Medusa's public packages and nothing else from it.
 - **Within Medusa**, only the edge (the root package, `middleware` and the health handlers) depends on Gin. The rest takes standard library types.
 
-## Layers inside the app
+## Features inside the app
+
+The app is split by feature. Each feature package holds its types, rules, errors, storage, service and handler; inside one, the layers are files:
 
 ```mermaid
 flowchart TD
-    routes["routes.go: middleware + routes"] --> handlers
-    handlers["handlers: bind input, return (result, error)"] --> services
-    services["services: business rules, httperr errors"] --> store
-    store["store: one repository per aggregate"] --> repos
-    repos["repositories: sqlc rows to models, driver errors to sentinels"] --> sqlc
-    sqlc["sqlc: generated queries"] --> pg[("Postgres via pgxpool")]
+    routes["routes.go: middleware + routes"] --> handler
+    subgraph feature["internal/account (a feature)"]
+        handler["handler.go: request types, (result, error) methods"] --> service
+        service["service.go: use cases and rules that need storage"]
+        errs["errors.go: declared apperr errors"]
+    end
+    service --> userpkg
+    subgraph userpkg["internal/user (a feature)"]
+        model["user.go: User, NormalizeEmail"]
+        repo["repository.go: sqlc rows to User, driver errors to user errors"]
+    end
+    repo --> sqlc["sqlc: generated queries"] --> pg[("Postgres via pgxpool")]
 ```
 
-Each layer only calls the one below it. Types crossing the layers:
-
-- Handlers receive DTOs (`internal/dto`).
-- Services and repositories exchange models (`internal/models`).
-- Generated `sqlc` types never leave the repositories.
+- Features depend on each other in one direction: `account` uses `user`, never the reverse.
+- Generated `sqlc` types never leave a repository, and neither do driver errors.
+- `internal/store` holds every feature's repository, for writes across features in one transaction.
 
 ## Startup
 
@@ -103,24 +109,29 @@ Inside a route, a `medusa.Handle*` adapter:
 
 ```mermaid
 flowchart LR
-    pg["pgx error"] -->|classify| sentinel["repositories.ErrNotFound / ErrDuplicate / wrapped error"]
-    sentinel --> svc["service maps to httperr (NotFound, Conflict, Internal)"]
-    svc --> adapter["medusa.Handle -> WriteError"]
-    adapter --> body["JSON: status, code, error, details, request_id"]
-    adapter --> log["Internal cause -> gin errors -> access log"]
+    pg["pgx error"] -->|classify| domain["user.ErrNotFound / ErrEmailTaken (apperr)"]
+    rule["business rule"] --> declared["feature error (apperr)"]
+    domain --> adapter["medusa.Handle -> WriteError"]
+    declared --> adapter
+    adapter -->|"httperr.Status(kind)"| body["application/problem+json: type, title, status, detail, code, errors, request_id"]
+    adapter --> log["cause -> gin errors -> access log"]
 ```
 
-- **Classified errors.** An `*httperr.Error` anywhere in the chain sets the response status and the stable `code`.
+The standard (kinds, codes, statuses) is [ADR 0003](adr/0003-application-errors-and-business-rules.md).
+
+- **Declared errors.** An `*apperr.Error` anywhere in the chain sets the status, through its kind, and the stable `code` (`user.email_taken`). Business code never picks an HTTP status.
 - **Context errors.** A canceled request context means the client went away and answers 499. An expired deadline answers 503 with a retry message. Neither counts as a 500.
-- **Unclassified errors** become a 500 with a generic message.
-- **Internal causes** are added to Gin's error list. The access log prints them in its `error` field; the response body never contains them.
+- **Unclassified errors** become a 500 with code `server.internal` and a generic message.
+- **Causes** are added to Gin's error list. The access log prints them in its `error` field; the response body never contains them.
 - **Login failures** answer the same 401 whether the email exists or not.
 
 Response shapes (a nil slice in `data` is always sent as `[]`, never `null`):
 
 ```json
 {"status": 200, "success": true, "message": "ok", "data": {}, "request_id": "..."}
-{"status": 404, "code": "NOT_FOUND", "error": "user not found", "request_id": "..."}
+{"type": "about:blank", "title": "Not Found", "status": 404, "detail": "user not found", "code": "user.not_found", "request_id": "..."}
+{"type": "about:blank", "title": "Bad Request", "status": 400, "detail": "some fields are invalid", "code": "request.validation_failed",
+ "errors": [{"field": "email", "message": "invalid email format"}], "request_id": "..."}
 ```
 
 ## Data
