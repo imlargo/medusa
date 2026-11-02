@@ -11,20 +11,23 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/imlargo/medusa"
-	"github.com/imlargo/medusa/httperr"
+	"github.com/imlargo/medusa/apperr"
 )
+
+// ErrInvalidAPIKey: the request carries an API key, but not the right one.
+var ErrInvalidAPIKey = apperr.Unauthenticated("auth.invalid_api_key", "invalid API key")
 
 // APIKey rejects requests whose X-API-Key header does not match key.
 func APIKey(key string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		got := c.GetHeader("X-API-Key")
 		if got == "" {
-			medusa.AbortWithError(c, httperr.Unauthorized("authorization header is missing"))
+			medusa.AbortWithError(c, medusa.ErrMissingCredentials)
 			return
 		}
 
 		if !keysMatch(got, key) {
-			medusa.AbortWithError(c, httperr.Unauthorized("invalid API key"))
+			medusa.AbortWithError(c, ErrInvalidAPIKey)
 			return
 		}
 
@@ -38,16 +41,12 @@ func BearerAPIKey(key string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		got, err := medusa.NewContext(c).BearerToken()
 		if err != nil {
-			medusa.AbortWithError(c, httperr.Unauthorized(err.Error()))
-			return
-		}
-		if got == "" {
-			medusa.AbortWithError(c, httperr.Unauthorized("authorization header is missing"))
+			medusa.AbortWithError(c, err)
 			return
 		}
 
 		if !keysMatch(got, key) {
-			medusa.AbortWithError(c, httperr.Unauthorized("invalid API key"))
+			medusa.AbortWithError(c, ErrInvalidAPIKey)
 			return
 		}
 

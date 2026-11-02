@@ -2,7 +2,6 @@ package medusa
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -37,19 +36,24 @@ func (c *Context) RequestID() string {
 }
 
 // BearerToken extracts the token from an "Authorization: Bearer <token>"
-// header. It returns an error when the header is missing or malformed.
+// header. It returns ErrMissingCredentials or ErrMalformedCredentials when
+// the header is missing, malformed or carries an empty token.
 func (c *Context) BearerToken() (string, error) {
 	header := c.GetHeader("Authorization")
 	if header == "" {
-		return "", errors.New("authorization header is missing")
+		return "", ErrMissingCredentials
 	}
 
 	scheme, token, found := strings.Cut(header, " ")
 	if !found || !strings.EqualFold(scheme, "bearer") {
-		return "", errors.New("authorization header must be in format 'Bearer token'")
+		return "", ErrMalformedCredentials
 	}
 
-	return strings.TrimSpace(token), nil
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", ErrMalformedCredentials
+	}
+	return token, nil
 }
 
 func requestID(c *gin.Context) string {

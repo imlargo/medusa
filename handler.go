@@ -23,8 +23,9 @@ import (
 //	users.POST("", medusa.HandleCreate(h.Create))
 //
 // Any error is rendered by WriteError, which derives the status from the
-// error: return httperr.NotFound("user") for a 404, and an unclassified error
-// becomes a 500 with its cause sent to the log and never to the client.
+// error's apperr.Kind: return a declared apperr.NotFound error for a 404, and
+// an unclassified error becomes a 500 with its cause sent to the log and
+// never to the client.
 
 // HandlerFunc is a handler that writes its own response and only reports errors.
 // Use it for endpoints that do not fit the typed adapters: streaming, file

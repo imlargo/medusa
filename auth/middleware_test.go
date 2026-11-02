@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,11 +40,12 @@ func TestMiddleware(t *testing.T) {
 		header     string
 		wantStatus int
 		wantBody   string
+		wantCode   string
 	}{
 		{name: "valid token", header: "Bearer " + valid, wantStatus: http.StatusOK, wantBody: "7"},
-		{name: "no header", wantStatus: http.StatusUnauthorized},
-		{name: "wrong scheme", header: "Basic " + valid, wantStatus: http.StatusUnauthorized},
-		{name: "invalid token", header: "Bearer nope", wantStatus: http.StatusUnauthorized},
+		{name: "no header", wantStatus: http.StatusUnauthorized, wantCode: medusa.ErrMissingCredentials.Code()},
+		{name: "wrong scheme", header: "Basic " + valid, wantStatus: http.StatusUnauthorized, wantCode: medusa.ErrMalformedCredentials.Code()},
+		{name: "invalid token", header: "Bearer nope", wantStatus: http.StatusUnauthorized, wantCode: auth.ErrInvalidToken.Code()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,6 +61,9 @@ func TestMiddleware(t *testing.T) {
 			}
 			if tt.wantBody != "" && rec.Body.String() != tt.wantBody {
 				t.Errorf("body = %q, want %q", rec.Body, tt.wantBody)
+			}
+			if tt.wantCode != "" && !strings.Contains(rec.Body.String(), `"code":"`+tt.wantCode+`"`) {
+				t.Errorf("body = %s, want code %s", rec.Body, tt.wantCode)
 			}
 		})
 	}

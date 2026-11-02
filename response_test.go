@@ -3,6 +3,7 @@ package medusa
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,11 +11,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/imlargo/medusa/apperr"
 	"github.com/imlargo/medusa/httperr"
 )
 
+var errUserNotFound = apperr.NotFound("user.not_found", "user not found")
+
 // render runs WriteError against a throwaway context and decodes the result.
-func render(t *testing.T, err error, setup func(*gin.Context)) (int, ErrorResponse) {
+func render(t *testing.T, err error, setup func(*gin.Context)) (*httptest.ResponseRecorder, httperr.Problem) {
 	t.Helper()
 
 	rec := httptest.NewRecorder()
@@ -26,60 +30,60 @@ func render(t *testing.T, err error, setup func(*gin.Context)) (int, ErrorRespon
 
 	WriteError(c, err)
 
-	var body ErrorResponse
+	var body httperr.Problem
 	if rec.Body.Len() > 0 {
 		if decodeErr := json.Unmarshal(rec.Body.Bytes(), &body); decodeErr != nil {
-			t.Fatalf("response body is not an ErrorResponse: %v (%q)", decodeErr, rec.Body.String())
+			t.Fatalf("response body is not a problem: %v (%q)", decodeErr, rec.Body.String())
 		}
 	}
-	return rec.Code, body
+	return rec, body
 }
 
-func TestWriteErrorDerivesStatusFromTheError(t *testing.T) {
+func TestWriteErrorRendersAProblem(t *testing.T) {
 	tests := []struct {
 		name       string
 		err        error
 		wantStatus int
-		wantCode   httperr.Code
+		wantCode   string
 	}{
-		{"not found", httperr.NotFound("user"), http.StatusNotFound, httperr.CodeNotFound},
-		{"too many requests", httperr.TooManyRequests(30), http.StatusTooManyRequests, httperr.CodeTooManyRequests},
-		{"unclassified", errors.New("boom"), http.StatusInternalServerError, httperr.CodeInternal},
+		{"declared error", errUserNotFound, http.StatusNotFound, "user.not_found"},
+		{"wrapped declared error", fmt.Errorf("get user 7: %w", errUserNotFound), http.StatusNotFound, "user.not_found"},
+		{"rate limited", apperr.New(apperr.KindResourceExhausted, "request.rate_limited", "slow down"), http.StatusTooManyRequests, "request.rate_limited"},
+		{"unclassified", errors.New("boom"), http.StatusInternalServerError, "server.internal"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status, body := render(t, tt.err, nil)
+			rec, body := render(t, tt.err, nil)
 
-			if status != tt.wantStatus {
-				t.Errorf("status = %d, want %d", status, tt.wantStatus)
+			if rec.Code != tt.wantStatus || body.Status != tt.wantStatus {
+				t.Errorf("status = %d (body %d), want %d", rec.Code, body.Status, tt.wantStatus)
 			}
 			if body.Code != tt.wantCode {
 				t.Errorf("code = %q, want %q", body.Code, tt.wantCode)
 			}
-			if body.Status != tt.wantStatus {
-				t.Errorf("body status = %d, want %d", body.Status, tt.wantStatus)
+			if got := rec.Header().Get("Content-Type"); got != httperr.ContentType {
+				t.Errorf("Content-Type = %q, want %q", got, httperr.ContentType)
 			}
 		})
 	}
 }
 
-// The internal cause is for the log, never for the client.
-func TestWriteErrorNeverLeaksTheInternalCause(t *testing.T) {
+// The cause is for the log, never for the client.
+func TestWriteErrorNeverLeaksTheCause(t *testing.T) {
 	secret := "connection to 10.0.0.5 refused: password authentication failed"
 
-	status, body := render(t, httperr.Internal(errors.New(secret)), nil)
-
-	if status != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
-	}
-
-	serialized, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	if body := string(serialized); strings.Contains(body, secret) {
-		t.Errorf("response leaked the internal cause: %s", body)
+	for name, err := range map[string]error{
+		"unclassified":        errors.New(secret),
+		"declared with cause": errUserNotFound.WithCause(errors.New(secret)),
+		"wrapped declared":    fmt.Errorf("%s: %w", secret, errUserNotFound),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec, _ := render(t, err, nil)
+			if strings.Contains(rec.Body.String(), secret) {
+				t.Errorf("response leaked the cause: %s", rec.Body)
+			}
+		})
 	}
 }
 
@@ -91,10 +95,10 @@ func TestWriteErrorRecordsTheCauseForLogging(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 
-	WriteError(c, httperr.Internal(cause))
+	WriteError(c, errUserNotFound.WithCause(cause))
 
 	if len(c.Errors) == 0 {
-		t.Fatal("c.Errors is empty, want the internal cause recorded")
+		t.Fatal("c.Errors is empty, want the cause recorded")
 	}
 	if got := c.Errors.Last().Err; !errors.Is(got, cause) {
 		t.Errorf("recorded error = %v, want %v", got, cause)
@@ -104,7 +108,7 @@ func TestWriteErrorRecordsTheCauseForLogging(t *testing.T) {
 func TestWriteErrorIncludesTheRequestID(t *testing.T) {
 	const id = "req-123"
 
-	_, body := render(t, httperr.NotFound("user"), func(c *gin.Context) {
+	_, body := render(t, errUserNotFound, func(c *gin.Context) {
 		c.Set(RequestIDKey, id)
 	})
 
@@ -130,7 +134,7 @@ func TestAbortWithErrorStopsTheChain(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 
-	AbortWithError(c, httperr.Unauthorized("nope"))
+	AbortWithError(c, ErrMissingCredentials)
 
 	if !c.IsAborted() {
 		t.Error("IsAborted() = false, want the chain stopped")

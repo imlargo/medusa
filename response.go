@@ -7,14 +7,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/imlargo/medusa/apperr"
 	"github.com/imlargo/medusa/httperr"
 )
 
 // The response format. There is exactly one way to send a success and one way
-// to send a failure:
+// to send a failure, an RFC 9457 problem (see package httperr):
 //
 //	{"status": 200, "success": true, "message": "ok", "data": {...}}
-//	{"status": 404, "code": "NOT_FOUND", "error": "user not found", "request_id": "..."}
+//	{"type": "about:blank", "title": "Not Found", "status": 404,
+//	 "detail": "user not found", "code": "user.not_found", "request_id": "..."}
 //
 // Handlers rarely call the writers directly: they return their result and the
 // Handle adapters render it.
@@ -34,15 +36,6 @@ type SuccessResponse struct {
 	Message   string `json:"message,omitempty"`
 	Data      any    `json:"data,omitempty"`
 	RequestID string `json:"request_id,omitempty"`
-}
-
-// ErrorResponse is the JSON body of every failed request.
-type ErrorResponse struct {
-	Status    int          `json:"status"`
-	Code      httperr.Code `json:"code"`
-	Error     string       `json:"error"`
-	Details   any          `json:"details,omitempty"`
-	RequestID string       `json:"request_id,omitempty"`
 }
 
 // PagedResponse is the JSON body of a paginated list.
@@ -94,30 +87,29 @@ func WriteNoContent(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// WriteError renders err, deriving the status from it. Any error is accepted;
-// unclassified ones become a 500.
+// WriteError renders err as an RFC 9457 problem, its status derived from the
+// error's apperr.Kind. Any error is accepted; one that is not an
+// *apperr.Error becomes a 500 (see apperr.From).
 //
-// An internal cause is also added to Gin's error list so the access log can
+// The error's cause is also added to Gin's error list so the access log can
 // record why the request failed. That is the only place it appears: it is
 // never serialized to the client.
 func WriteError(c *gin.Context, err error) {
-	appErr := httperr.From(err)
-	if appErr == nil {
+	if err == nil {
 		return
 	}
 
-	if appErr.Internal != nil {
+	if cause := apperr.From(err).Cause(); cause != nil {
 		// Recorded for the access log, not for the response body.
-		_ = c.Error(appErr.Internal)
+		_ = c.Error(cause)
 	}
 
-	c.JSON(appErr.Status, ErrorResponse{
-		Status:    appErr.Status,
-		Code:      appErr.Code,
-		Error:     appErr.Message,
-		Details:   appErr.Details,
-		RequestID: requestID(c),
-	})
+	problem := httperr.NewProblem(err)
+	problem.RequestID = requestID(c)
+
+	if writeErr := httperr.Write(c.Writer, problem); writeErr != nil {
+		_ = c.Error(writeErr)
+	}
 }
 
 // AbortWithError renders err and stops the middleware chain. Middleware should

@@ -11,7 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/imlargo/medusa"
-	"github.com/imlargo/medusa/httperr"
+	"github.com/imlargo/medusa/apperr"
+)
+
+var (
+	errUserNotFound = apperr.NotFound("user.not_found", "user not found")
+	errEmailTaken   = apperr.Conflict("user.email_taken", "a user with this email already exists")
 )
 
 func init() { gin.SetMode(gin.TestMode) }
@@ -102,16 +107,17 @@ func TestHandleRejectsAnInvalidBodyBeforeTheHandlerRuns(t *testing.T) {
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 	}
-	if body["code"] != string(httperr.CodeValidation) {
-		t.Errorf("code = %v, want %q", body["code"], httperr.CodeValidation)
+	if body["code"] != medusa.ErrValidation.Code() {
+		t.Errorf("code = %v, want %q", body["code"], medusa.ErrValidation.Code())
 	}
 
-	details, ok := body["details"].(map[string]any)
-	if !ok {
-		t.Fatalf("details = %v, want a field map", body["details"])
+	fields, ok := body["errors"].([]any)
+	if !ok || len(fields) != 1 {
+		t.Fatalf("errors = %v, want one field error", body["errors"])
 	}
-	if details["name"] != "this field is required" {
-		t.Errorf("details[name] = %v, want the required message", details["name"])
+	field, _ := fields[0].(map[string]any)
+	if field["field"] != "name" || field["message"] != "this field is required" {
+		t.Errorf("errors[0] = %v, want name: this field is required", field)
 	}
 }
 
@@ -123,9 +129,9 @@ func TestHandleDerivesTheStatusFromTheReturnedError(t *testing.T) {
 		err        error
 		wantStatus int
 	}{
-		{"not found", httperr.NotFound("user"), http.StatusNotFound},
-		{"conflict", httperr.Conflict("taken"), http.StatusConflict},
-		{"unauthorized", httperr.Unauthorized("nope"), http.StatusUnauthorized},
+		{"not found", errUserNotFound, http.StatusNotFound},
+		{"conflict", errEmailTaken, http.StatusConflict},
+		{"unauthenticated", medusa.ErrMissingCredentials, http.StatusUnauthorized},
 		{"unclassified becomes 500", errors.New("boom"), http.StatusInternalServerError},
 	}
 
@@ -173,7 +179,7 @@ func TestHandleDelete(t *testing.T) {
 	t.Run("failure", func(t *testing.T) {
 		status, _ := call(t, http.MethodDelete, "/x", "",
 			medusa.HandleDelete(func(ctx *medusa.Context) error {
-				return httperr.NotFound("user")
+				return errUserNotFound
 			}))
 
 		if status != http.StatusNotFound {

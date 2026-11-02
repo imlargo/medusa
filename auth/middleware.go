@@ -4,8 +4,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/imlargo/medusa"
-	"github.com/imlargo/medusa/httperr"
+	"github.com/imlargo/medusa/apperr"
 )
+
+// ErrInvalidToken: the bearer token is malformed, forged, expired or from
+// another issuer. The reason goes to the log, never to the client.
+var ErrInvalidToken = apperr.Unauthenticated("auth.invalid_token", "invalid or expired token")
 
 // subjectKey holds the authenticated subject in the Gin context.
 const subjectKey = "medusa_auth_subject"
@@ -17,13 +21,13 @@ func Middleware[S Subject](j *JWT[S]) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := medusa.NewContext(c).BearerToken()
 		if err != nil {
-			medusa.AbortWithError(c, httperr.Unauthorized(err.Error()))
+			medusa.AbortWithError(c, err)
 			return
 		}
 
 		claims, err := j.Parse(token)
 		if err != nil {
-			medusa.AbortWithError(c, httperr.Unauthorized("invalid or expired token"))
+			medusa.AbortWithError(c, ErrInvalidToken.WithCause(err))
 			return
 		}
 

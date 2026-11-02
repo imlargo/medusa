@@ -7,8 +7,12 @@ import (
 	"github.com/imlargo/ratelimit"
 
 	"github.com/imlargo/medusa"
-	"github.com/imlargo/medusa/httperr"
+	"github.com/imlargo/medusa/apperr"
 )
+
+// ErrRateLimited: the client is over its quota. The retry_after_seconds
+// metadata, and the Retry-After header, say when to try again.
+var ErrRateLimited = apperr.New(apperr.KindResourceExhausted, "request.rate_limited", "rate limit exceeded")
 
 // RateLimit enforces the limiter's rules on every request that
 // reaches it. Requests over the limit get a 429 carrying the standard rate limit
@@ -31,7 +35,7 @@ func RateLimit(rl *ratelimit.Limiter) gin.HandlerFunc {
 			// Round up: telling a client to retry in 0 seconds invites an
 			// immediate retry that is guaranteed to be rejected again.
 			seconds := int(math.Ceil(d.RetryAfter.Seconds()))
-			medusa.AbortWithError(ctx, httperr.TooManyRequests(seconds))
+			medusa.AbortWithError(ctx, ErrRateLimited.WithMeta("retry_after_seconds", seconds))
 			return
 		}
 

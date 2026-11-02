@@ -4,13 +4,14 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"uuid"
 
 	"github.com/go-playground/validator/v10"
 
-	"github.com/imlargo/medusa/httperr"
+	"github.com/imlargo/medusa/apperr"
 )
 
 // ---------------------------------------------------------------------------
@@ -46,24 +47,28 @@ func (c *Context) BindURI(obj any) error {
 // ---------------------------------------------------------------------------
 
 // formatValidationError turns a binding failure into a client-facing error:
-// a field-by-field map when the validator rejected the value, a plain 400 when
-// the payload could not be parsed at all.
+// ErrValidation listing each rejected field, or ErrMalformedBody when the
+// payload could not be parsed at all.
 func (c *Context) formatValidationError(err error) error {
 	// A body cut off by the size cap is not a validation problem, and reporting
 	// it as one sends the client hunting for a field that is fine.
 	if tooLarge, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		return httperr.PayloadTooLarge(tooLarge.Limit)
+		return ErrBodyTooLarge.WithMeta("max_bytes", tooLarge.Limit).WithCause(err)
 	}
 
 	if validationErrors, ok := errors.AsType[validator.ValidationErrors](err); ok {
-		details := make(map[string]string, len(validationErrors))
+		fields := make([]apperr.FieldError, 0, len(validationErrors))
 		for _, fieldErr := range validationErrors {
-			details[strings.ToLower(fieldErr.Field())] = formatValidationMessage(fieldErr)
+			fields = append(fields, apperr.FieldError{
+				Field:   strings.ToLower(fieldErr.Field()),
+				Message: formatValidationMessage(fieldErr),
+			})
 		}
-		return httperr.Validation("validation failed", details)
+		slices.SortFunc(fields, func(a, b apperr.FieldError) int { return strings.Compare(a.Field, b.Field) })
+		return ErrValidation.WithFields(fields...)
 	}
 
-	return httperr.BadRequest("invalid request body")
+	return ErrMalformedBody.WithCause(err)
 }
 
 func formatValidationMessage(e validator.FieldError) string {
@@ -179,15 +184,12 @@ func formatValidationMessage(e validator.FieldError) string {
 func (c *Context) ParamID(name string) (int64, error) {
 	param := c.Param(name)
 	if param == "" {
-		return 0, c.paramError(name + " parameter is required")
+		return 0, paramError(name, "this parameter is required")
 	}
 
 	id, err := strconv.ParseInt(param, 10, 64)
-	if err != nil {
-		return 0, c.paramError("invalid " + name + " parameter: must be a positive integer")
-	}
-	if id <= 0 {
-		return 0, c.paramError(name + " parameter must be greater than 0")
+	if err != nil || id <= 0 {
+		return 0, paramError(name, "must be a positive integer")
 	}
 
 	return id, nil
@@ -198,20 +200,20 @@ func (c *Context) ParamID(name string) (int64, error) {
 func (c *Context) ParamUUID(name string) (string, error) {
 	param := c.Param(name)
 	if param == "" {
-		return "", c.paramError(name + " parameter is required")
+		return "", paramError(name, "this parameter is required")
 	}
 
 	parsed, err := uuid.Parse(param)
 	if err != nil {
-		return "", c.paramError("invalid " + name + " parameter: must be a valid UUID")
+		return "", paramError(name, "must be a valid UUID")
 	}
 
 	return parsed.String(), nil
 }
 
-// paramError builds a 400 for a malformed URL parameter.
-func (c *Context) paramError(message string) error {
-	return httperr.BadRequest(message)
+// paramError reports the URL parameter name as invalid.
+func paramError(name, message string) error {
+	return ErrInvalidParameter.WithFields(apperr.FieldError{Field: name, Message: message})
 }
 
 // ---------------------------------------------------------------------------

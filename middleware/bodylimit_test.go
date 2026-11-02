@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/imlargo/medusa"
-	"github.com/imlargo/medusa/httperr"
 	"github.com/imlargo/medusa/middleware"
 )
 
@@ -20,7 +19,7 @@ type payload struct {
 	Text string `json:"text" binding:"required"`
 }
 
-func post(t *testing.T, limit int64, body string) (int, medusa.ErrorResponse) {
+func post(t *testing.T, limit int64, body string) (int, map[string]any) {
 	t.Helper()
 
 	router := gin.New()
@@ -35,7 +34,7 @@ func post(t *testing.T, limit int64, body string) (int, medusa.ErrorResponse) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	var decoded medusa.ErrorResponse
+	var decoded map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &decoded)
 	return rec.Code, decoded
 }
@@ -56,15 +55,10 @@ func TestOversizedBodyIs413NotAValidationError(t *testing.T) {
 	if status != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want %d", status, http.StatusRequestEntityTooLarge)
 	}
-	if body.Code != httperr.CodePayloadTooLarge {
-		t.Errorf("code = %q, want %q", body.Code, httperr.CodePayloadTooLarge)
+	if body["code"] != medusa.ErrBodyTooLarge.Code() {
+		t.Errorf("code = %v, want %q", body["code"], medusa.ErrBodyTooLarge.Code())
 	}
-
-	details, ok := body.Details.(map[string]any)
-	if !ok {
-		t.Fatalf("details = %v, want the limit reported", body.Details)
-	}
-	if details["max_bytes"] != float64(512) {
-		t.Errorf("details[max_bytes] = %v, want 512", details["max_bytes"])
+	if body["max_bytes"] != float64(512) {
+		t.Errorf("max_bytes = %v, want 512", body["max_bytes"])
 	}
 }

@@ -1,20 +1,36 @@
-// Package httperr is the error model behind every failed HTTP response: a
-// status, a stable machine-readable code, a client-safe message, optional
-// details and an internal cause that never reaches the client.
+// Package httperr reports application errors over HTTP as RFC 9457 problem
+// details (application/problem+json):
 //
-// It depends only on the standard library, so code that classifies failures
-// does not have to import the HTTP framework that renders them. The medusa
-// package renders an *Error for Gin:
+//	HTTP/1.1 409 Conflict
+//	Content-Type: application/problem+json
 //
-//	return nil, httperr.NotFound("user")
+//	{
+//	  "type": "about:blank",
+//	  "title": "Conflict",
+//	  "status": 409,
+//	  "detail": "a user with this email already exists",
+//	  "code": "user.email_taken",
+//	  "request_id": "..."
+//	}
+//
+// The status comes from the error's apperr.Kind; code is the stable code
+// clients branch on, and errors lists invalid fields. Error metadata
+// (apperr.Error.WithMeta) is added as extra members.
+//
+// It depends only on the standard library and apperr. The medusa package
+// renders problems for Gin; Write serves plain net/http handlers.
 package httperr
 
 import (
-	"context"
-	"errors"
-	"fmt"
+	"encoding/json"
+	"maps"
 	"net/http"
+
+	"github.com/imlargo/medusa/apperr"
 )
+
+// ContentType is the media type of every problem response.
+const ContentType = "application/problem+json"
 
 // StatusClientClosedRequest is the status for a request the client abandoned
 // before the server answered. It is nginx's convention; there is no IANA code
@@ -22,203 +38,107 @@ import (
 // of 5xx dashboards and alerts.
 const StatusClientClosedRequest = 499
 
-// Code is a machine-readable error code clients can branch on. Codes are part
-// of the API contract and must stay stable across versions.
-type Code string
+// typeBlank is the RFC 9457 type for problems without their own
+// documentation page: the status and title say what happened, and code
+// carries the rule.
+const typeBlank = "about:blank"
 
-const (
-	// CodeBadRequest: the request was malformed or carried invalid parameters (400).
-	CodeBadRequest Code = "BAD_REQUEST"
-
-	// CodeValidation: the body parsed but failed validation (400). Details
-	// carries a field-to-message map.
-	CodeValidation Code = "VALIDATION_FAILED"
-
-	// CodeUnauthorized: authentication is required, missing or invalid (401).
-	CodeUnauthorized Code = "UNAUTHORIZED"
-
-	// CodeForbidden: authenticated but not allowed to touch this resource (403).
-	CodeForbidden Code = "FORBIDDEN"
-
-	// CodeNotFound: the requested resource does not exist (404).
-	CodeNotFound Code = "NOT_FOUND"
-
-	// CodeConflict: the request conflicts with the resource's current state (409).
-	CodeConflict Code = "CONFLICT"
-
-	// CodePayloadTooLarge: the request body exceeded the configured cap (413).
-	CodePayloadTooLarge Code = "PAYLOAD_TOO_LARGE"
-
-	// CodeTooManyRequests: the client exceeded its rate limit (429).
-	CodeTooManyRequests Code = "TOO_MANY_REQUESTS"
-
-	// CodeInternal: an unexpected server-side failure (500). The underlying
-	// cause is logged, never sent to the client.
-	CodeInternal Code = "INTERNAL_SERVER_ERROR"
-
-	// CodeServiceUnavailable: a dependency is down or the app is draining (503).
-	CodeServiceUnavailable Code = "SERVICE_UNAVAILABLE"
-
-	// CodeClientClosedRequest: the client went away before the answer (499).
-	CodeClientClosedRequest Code = "CLIENT_CLOSED_REQUEST"
-)
-
-// Error carries everything needed to render a failed response. Use the
-// constructors below rather than building one by hand.
-//
-// Internal holds the underlying cause. It is never serialized: it goes to the
-// access log, so a 500 can be diagnosed without leaking internals.
-type Error struct {
-	Code     Code
-	Message  string
-	Status   int
-	Details  any
-	Internal error
+var statusByKind = map[apperr.Kind]int{
+	apperr.KindInternal:           http.StatusInternalServerError,
+	apperr.KindInvalid:            http.StatusBadRequest,
+	apperr.KindNotFound:           http.StatusNotFound,
+	apperr.KindConflict:           http.StatusConflict,
+	apperr.KindFailedPrecondition: http.StatusUnprocessableEntity,
+	apperr.KindUnauthenticated:    http.StatusUnauthorized,
+	apperr.KindPermissionDenied:   http.StatusForbidden,
+	apperr.KindTooLarge:           http.StatusRequestEntityTooLarge,
+	apperr.KindResourceExhausted:  http.StatusTooManyRequests,
+	apperr.KindUnavailable:        http.StatusServiceUnavailable,
+	apperr.KindCanceled:           StatusClientClosedRequest,
 }
 
-// Error includes the internal cause, so this string is safe for logs but not
-// for clients; clients get Message.
-func (e *Error) Error() string {
-	if e.Internal != nil {
-		return fmt.Sprintf("%s: %v", e.Message, e.Internal)
+// Status is the HTTP status for kind. An unknown kind is a 500.
+func Status(kind apperr.Kind) int {
+	if status, ok := statusByKind[kind]; ok {
+		return status
 	}
-	return e.Message
+	return http.StatusInternalServerError
 }
 
-// Unwrap exposes the internal cause to errors.Is and errors.As.
-func (e *Error) Unwrap() error { return e.Internal }
+// Problem is the response body of every failed request.
+type Problem struct {
+	Type      string              `json:"type"`
+	Title     string              `json:"title"`
+	Status    int                 `json:"status"`
+	Detail    string              `json:"detail"`
+	Code      string              `json:"code"`
+	Errors    []apperr.FieldError `json:"errors,omitempty"`
+	RequestID string              `json:"request_id,omitempty"`
 
-// WithDetails attaches details and returns the same error for chaining.
-func (e *Error) WithDetails(details any) *Error {
-	e.Details = details
-	return e
+	// Extensions are the error's metadata, sent as extra members. A key
+	// that collides with a member above is dropped.
+	Extensions map[string]any `json:"-"`
 }
 
-// BadRequest reports a malformed request (400).
-func BadRequest(message string) *Error {
-	return &Error{Code: CodeBadRequest, Message: message, Status: http.StatusBadRequest}
-}
+// NewProblem describes err as a problem. An error that is not an
+// *apperr.Error is reported as apperr.From reports it: an internal error, a
+// cancellation or a timeout. NewProblem(nil) is the zero Problem.
+func NewProblem(err error) Problem {
+	appErr := apperr.From(err)
+	if appErr == nil {
+		return Problem{}
+	}
 
-// Validation reports a body that parsed but failed validation (400). details
-// is typically a field-to-message map.
-func Validation(message string, details any) *Error {
-	return &Error{Code: CodeValidation, Message: message, Status: http.StatusBadRequest, Details: details}
-}
+	status := Status(appErr.Kind())
+	title := http.StatusText(status)
+	if status == StatusClientClosedRequest {
+		title = "Client Closed Request"
+	}
 
-// Unauthorized reports missing or invalid authentication (401).
-func Unauthorized(message string) *Error {
-	return &Error{Code: CodeUnauthorized, Message: message, Status: http.StatusUnauthorized}
-}
-
-// Forbidden reports an authenticated caller without permission (403).
-func Forbidden(message string) *Error {
-	return &Error{Code: CodeForbidden, Message: message, Status: http.StatusForbidden}
-}
-
-// NotFound reports a missing resource (404). resource names what was looked
-// up, for example "user".
-func NotFound(resource string) *Error {
-	return &Error{Code: CodeNotFound, Message: resource + " not found", Status: http.StatusNotFound}
-}
-
-// Conflict reports a clash with the resource's current state (409).
-func Conflict(message string) *Error {
-	return &Error{Code: CodeConflict, Message: message, Status: http.StatusConflict}
-}
-
-// PayloadTooLarge reports a request body over the limit (413).
-func PayloadTooLarge(maxBytes int64) *Error {
-	return &Error{
-		Code:    CodePayloadTooLarge,
-		Message: "request body is too large",
-		Status:  http.StatusRequestEntityTooLarge,
-		Details: map[string]int64{"max_bytes": maxBytes},
+	return Problem{
+		Type:       typeBlank,
+		Title:      title,
+		Status:     status,
+		Detail:     appErr.Message(),
+		Code:       appErr.Code(),
+		Errors:     appErr.Fields(),
+		Extensions: appErr.Meta(),
 	}
 }
 
-// TooManyRequests reports an exhausted rate limit (429), telling the client
-// how many seconds to wait.
-func TooManyRequests(retryAfterSeconds int) *Error {
-	return &Error{
-		Code:    CodeTooManyRequests,
-		Message: "rate limit exceeded",
-		Status:  http.StatusTooManyRequests,
-		Details: map[string]int{"retry_after_seconds": retryAfterSeconds},
+// MarshalJSON writes the members, then the extensions that do not collide
+// with them.
+func (p Problem) MarshalJSON() ([]byte, error) {
+	type members Problem
+	base, err := json.Marshal(members(p))
+	if err != nil || len(p.Extensions) == 0 {
+		return base, err
 	}
+
+	merged := make(map[string]any, len(p.Extensions)+8)
+	maps.Copy(merged, p.Extensions)
+
+	var fixed map[string]json.RawMessage
+	if err := json.Unmarshal(base, &fixed); err != nil {
+		return nil, err
+	}
+	for k, v := range fixed {
+		merged[k] = v
+	}
+
+	return json.Marshal(merged)
 }
 
-// Internal reports an unexpected failure (500). The cause is logged; the
-// client only ever sees a generic message.
-func Internal(cause error) *Error {
-	return InternalWithMessage("an internal error occurred", cause)
-}
-
-// InternalWithMessage is Internal with a client-safe message of your own.
-// Never pass raw error text: it is the most common way internals leak.
-func InternalWithMessage(message string, cause error) *Error {
-	return &Error{
-		Code:     CodeInternal,
-		Message:  message,
-		Status:   http.StatusInternalServerError,
-		Internal: cause,
-	}
-}
-
-// ServiceUnavailable reports a dependency being down or the app draining (503).
-func ServiceUnavailable(message string) *Error {
-	return &Error{Code: CodeServiceUnavailable, Message: message, Status: http.StatusServiceUnavailable}
-}
-
-// From converts any error into an *Error.
-//
-// An *Error anywhere in the chain is returned as is, so a wrapped error keeps
-// its status and code. A canceled context means the client went away (499),
-// and an expired deadline means the request ran out of time (503); neither is
-// a server bug. Anything else becomes a 500 with the original error as the
-// internal cause: an error nobody classified is not something to describe to
-// a client.
-func From(err error) *Error {
-	if err == nil {
-		return nil
+// Write sends p as the response. Use it from plain net/http handlers; Gin
+// handlers return their error and let the medusa adapters render it.
+func Write(w http.ResponseWriter, p Problem) error {
+	body, err := json.Marshal(p)
+	if err != nil {
+		return err
 	}
 
-	if appErr, ok := errors.AsType[*Error](err); ok {
-		return appErr
-	}
-
-	switch {
-	case errors.Is(err, context.Canceled):
-		return &Error{
-			Code:     CodeClientClosedRequest,
-			Message:  "the request was canceled",
-			Status:   StatusClientClosedRequest,
-			Internal: err,
-		}
-	case errors.Is(err, context.DeadlineExceeded):
-		return &Error{
-			Code:     CodeServiceUnavailable,
-			Message:  "the request took too long, retry later",
-			Status:   http.StatusServiceUnavailable,
-			Internal: err,
-		}
-	}
-
-	return Internal(err)
-}
-
-// Wrap adds a client-safe message while preserving the classification. A
-// wrapped *Error keeps its status, code and details; anything else becomes a
-// 500.
-func Wrap(err error, message string) *Error {
-	if appErr, ok := errors.AsType[*Error](err); ok {
-		return &Error{
-			Code:     appErr.Code,
-			Message:  message,
-			Status:   appErr.Status,
-			Details:  appErr.Details,
-			Internal: err,
-		}
-	}
-
-	return InternalWithMessage(message, err)
+	w.Header().Set("Content-Type", ContentType)
+	w.WriteHeader(p.Status)
+	_, err = w.Write(body)
+	return err
 }
