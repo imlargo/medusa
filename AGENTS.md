@@ -1,6 +1,6 @@
 # AGENTS.md
 
-How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md); the reasoning behind the layout is in [docs/adr/0001-separate-medusa-from-the-app.md](docs/adr/0001-separate-medusa-from-the-app.md).
+How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md), how the system behaves at runtime in [docs/architecture.md](docs/architecture.md), and the reasoning behind the layout in [docs/adr/0001-separate-medusa-from-the-app.md](docs/adr/0001-separate-medusa-from-the-app.md).
 
 ## The mental model
 
