@@ -139,3 +139,34 @@ func TestAbortWithErrorStopsTheChain(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 }
+
+// A list with no rows must still be a list: null breaks clients that iterate it.
+func TestNilSlicesAreSentAsEmptyLists(t *testing.T) {
+	type item struct{ ID int }
+
+	tests := []struct {
+		name  string
+		write func(c *gin.Context)
+	}{
+		{"WriteSuccess", func(c *gin.Context) { WriteSuccess(c, http.StatusOK, MessageOK, []item(nil)) }},
+		{"Paged", func(c *gin.Context) { Paged(NewContext(c), []item(nil), Pagination{}, 0) }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+			tt.write(c)
+
+			var body map[string]json.RawMessage
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("body is not JSON: %v", err)
+			}
+			if got := string(body["data"]); got != "[]" {
+				t.Errorf("data = %s, want []", got)
+			}
+		})
+	}
+}

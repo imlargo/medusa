@@ -1,6 +1,7 @@
 package httperr
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -102,5 +103,35 @@ func TestErrorMessageIncludesTheCauseForLogs(t *testing.T) {
 
 	if got, want := err.Error(), "could not save: disk full"; got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+// A client that gave up, or a request out of time, is not a server bug and
+// must not count as a 500.
+func TestFromClassifiesContextErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   Code
+	}{
+		{"canceled", fmt.Errorf("query users: %w", context.Canceled), StatusClientClosedRequest, CodeClientClosedRequest},
+		{"deadline", fmt.Errorf("query users: %w", context.DeadlineExceeded), http.StatusServiceUnavailable, CodeServiceUnavailable},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := From(tt.err)
+
+			if got.Status != tt.wantStatus {
+				t.Errorf("status = %d, want %d", got.Status, tt.wantStatus)
+			}
+			if got.Code != tt.wantCode {
+				t.Errorf("code = %q, want %q", got.Code, tt.wantCode)
+			}
+			if !errors.Is(got, tt.err) {
+				t.Error("errors.Is(From(err), err) = false, want the cause kept for the log")
+			}
+		})
 	}
 }

@@ -10,10 +10,17 @@
 package httperr
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 )
+
+// StatusClientClosedRequest is the status for a request the client abandoned
+// before the server answered. It is nginx's convention; there is no IANA code
+// for it. Nobody reads the response, but the status keeps these requests out
+// of 5xx dashboards and alerts.
+const StatusClientClosedRequest = 499
 
 // Code is a machine-readable error code clients can branch on. Codes are part
 // of the API contract and must stay stable across versions.
@@ -51,6 +58,9 @@ const (
 
 	// CodeServiceUnavailable: a dependency is down or the app is draining (503).
 	CodeServiceUnavailable Code = "SERVICE_UNAVAILABLE"
+
+	// CodeClientClosedRequest: the client went away before the answer (499).
+	CodeClientClosedRequest Code = "CLIENT_CLOSED_REQUEST"
 )
 
 // Error carries everything needed to render a failed response. Use the
@@ -162,9 +172,11 @@ func ServiceUnavailable(message string) *Error {
 // From converts any error into an *Error.
 //
 // An *Error anywhere in the chain is returned as is, so a wrapped error keeps
-// its status and code. Anything else becomes a 500 with the original error as
-// the internal cause: an error nobody classified is not something to describe
-// to a client.
+// its status and code. A canceled context means the client went away (499),
+// and an expired deadline means the request ran out of time (503); neither is
+// a server bug. Anything else becomes a 500 with the original error as the
+// internal cause: an error nobody classified is not something to describe to
+// a client.
 func From(err error) *Error {
 	if err == nil {
 		return nil
@@ -172,6 +184,23 @@ func From(err error) *Error {
 
 	if appErr, ok := errors.AsType[*Error](err); ok {
 		return appErr
+	}
+
+	switch {
+	case errors.Is(err, context.Canceled):
+		return &Error{
+			Code:     CodeClientClosedRequest,
+			Message:  "the request was canceled",
+			Status:   StatusClientClosedRequest,
+			Internal: err,
+		}
+	case errors.Is(err, context.DeadlineExceeded):
+		return &Error{
+			Code:     CodeServiceUnavailable,
+			Message:  "the request took too long, retry later",
+			Status:   http.StatusServiceUnavailable,
+			Internal: err,
+		}
 	}
 
 	return Internal(err)

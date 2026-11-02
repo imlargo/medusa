@@ -3,6 +3,7 @@ package medusa
 import (
 	"math"
 	"net/http"
+	"reflect"
 
 	"github.com/gin-gonic/gin"
 
@@ -65,15 +66,27 @@ type PaginationMeta struct {
 
 // WriteSuccess renders a successful response. The status and message spell
 // out the intent at the call site; the Context helpers wrap the usual
-// combinations.
+// combinations. A nil slice is sent as [] so list endpoints always answer
+// with a list.
 func WriteSuccess(c *gin.Context, status int, message string, data any) {
 	c.JSON(status, SuccessResponse{
 		Status:    status,
 		Success:   true,
 		Message:   message,
-		Data:      data,
+		Data:      emptyListIfNil(data),
 		RequestID: requestID(c),
 	})
+}
+
+// emptyListIfNil turns a nil slice into an empty one. A query that matches no
+// rows returns a nil slice, which encodes as null, and clients that iterate
+// the field break on it.
+func emptyListIfNil(data any) any {
+	v := reflect.ValueOf(data)
+	if v.Kind() == reflect.Slice && v.IsNil() {
+		return reflect.MakeSlice(v.Type(), 0, 0).Interface()
+	}
+	return data
 }
 
 // WriteNoContent replies 204 with an empty body.
@@ -154,9 +167,13 @@ func (c *Context) AbortWithFailure(err error) {
 }
 
 // Paged replies 200 with one page of results and the metadata to walk the
-// rest. It is a function rather than a method because Go methods cannot have
-// type parameters.
+// rest. An empty page is sent as [], never null. It is a function rather than
+// a method because Go methods cannot have type parameters.
 func Paged[T any](c *Context, data []T, page Pagination, totalItems int64) {
+	if data == nil {
+		data = []T{}
+	}
+
 	pageSize := page.GetPageSize(DefaultPageSize)
 	currentPage := page.GetPage()
 	totalPages := int(math.Ceil(float64(totalItems) / float64(pageSize)))
