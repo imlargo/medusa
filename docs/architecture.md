@@ -2,7 +2,7 @@
 
 How the system fits together and how it behaves at runtime. Where code goes and how to add things is in [AGENTS.md](../AGENTS.md); why it is laid out this way is in [ADR 0001](adr/0001-separate-medusa-from-the-app.md).
 
-## Two modules, one direction
+## Modules, one direction
 
 ```mermaid
 flowchart LR
@@ -10,18 +10,25 @@ flowchart LR
         cmd["cmd/api, cmd/migrate"]
         bootstrap["bootstrap: container, routes"]
         domain["handlers, services, repositories"]
-        infra["config, auth, database, sqlc"]
+        infra["config, migrations, queries, sqlc"]
     end
-    subgraph medusa["/ (github.com/imlargo/medusa)"]
+    subgraph batteries["batteries (one module each)"]
+        pg["postgres, postgres/pgtest (pgx, goose)"]
+        auth["auth (golang-jwt, Gin)"]
+    end
+    subgraph medusa["/ core (github.com/imlargo/medusa)"]
         edge["medusa, middleware, health handlers (Gin)"]
         core["httperr, httpserver, lifecycle, job, metrics, storage (stdlib types)"]
     end
+    app --> batteries
     app --> medusa
+    auth --> edge
     edge --> core
 ```
 
-- **Medusa** knows HTTP, errors, lifecycle, health, metrics and object storage. It knows nothing about users, databases or configuration.
-- **The app** owns everything specific to this product. It imports Medusa's public packages and nothing else from it.
+- **The core** knows HTTP, errors, lifecycle, health, metrics and object storage. It knows nothing about users, databases or configuration.
+- **The batteries** each wrap one integration: `postgres` the pool, migrations and test databases, `auth` JWT tokens and the middleware. An app pays for a battery's dependencies only if it imports it.
+- **The app** owns everything specific to this product: its schema, queries, repositories, config and routes. It imports Medusa's public packages and nothing else from it.
 - **Within Medusa**, only the edge (the root package, `middleware` and the health handlers) depends on Gin. The rest takes standard library types.
 
 ## Layers inside the app
@@ -78,7 +85,7 @@ Middleware runs in this order:
 | 5 | `middleware.BodyLimit` | all | Bodies over `MAX_REQUEST_BODY_BYTES` fail with 413 |
 | 6 | `middleware.Metrics` | all, when enabled | Count and duration per route template |
 | 7 | `middleware.RateLimit` | `/v1` | 429 over quota; credential endpoints get a tighter rule |
-| 8 | `auth.Middleware` | protected `/v1` routes | Valid bearer token required; stores the user ID |
+| 8 | `auth.Middleware` | protected `/v1` routes | Valid bearer token (signature, expiry, issuer) required; stores the user ID |
 
 Routes outside `/v1` are deliberately free of auth and rate limiting:
 
@@ -126,7 +133,7 @@ Response shapes (a nil slice in `data` is always sent as `[]`, never `null`):
 | Query logging | Every statement in development; statements over 200 ms as warnings in any environment |
 | Readiness | `/ready` pings the pool and Redis concurrently, bounded by 5 s |
 | Transactions | `store.WithTx(ctx, fn)` gives `fn` a store whose repositories share one transaction; nested calls are savepoints |
-| Tests | `dbtest.New(t)` creates a migrated database per test on `TEST_DATABASE_URL` and drops it afterwards |
+| Tests | `pgtest.New(t, migrations.FS)` creates a migrated database per test on `TEST_DATABASE_URL` and drops it afterwards |
 
 The baseline migration (`00001`) matches the table GORM created, so existing databases adopt it without changes. The schema is the single source for both goose and sqlc, so the queries are checked against it at generation time.
 

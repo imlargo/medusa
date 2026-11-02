@@ -1,22 +1,22 @@
 # AGENTS.md
 
-How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md), how the system behaves at runtime in [docs/architecture.md](docs/architecture.md), and the reasoning behind the layout in [docs/adr/0001-separate-medusa-from-the-app.md](docs/adr/0001-separate-medusa-from-the-app.md).
+How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md), how the system behaves at runtime in [docs/architecture.md](docs/architecture.md), and the reasoning behind the layout in [docs/adr/](docs/adr/) (0001: Medusa apart from the app, 0002: batteries as optional modules).
 
 ## The mental model
 
-There are two things in this repo, and the whole layout follows from keeping them apart:
+There are two things in this repo, Medusa and an app built on it, and the whole layout follows from keeping them apart. Medusa itself has two layers: a core and optional batteries.
 
-| | Medusa | The app |
-|---|---|---|
-| What | A reusable toolkit for HTTP APIs on Gin | One concrete API built on Medusa |
-| Where | Repository root (`/`) | `app/` |
-| Module | `github.com/imlargo/medusa` | `github.com/imlargo/medusa/app` |
-| Knows about | HTTP, errors, lifecycle, health, metrics, storage | Users, auth, Postgres, Redis, config, routes |
-| Imports | Never the app | Medusa, through its public packages only |
+| | Medusa core | Medusa batteries | The app |
+|---|---|---|---|
+| What | A toolkit for HTTP APIs on Gin | Ready-made pieces most APIs need, opt-in | One concrete API built on Medusa |
+| Where | Repository root (`/`) | `postgres/`, `auth/` | `app/` |
+| Module | `github.com/imlargo/medusa` | `github.com/imlargo/medusa/<battery>`, one each | `github.com/imlargo/medusa/app` |
+| Knows about | HTTP, errors, lifecycle, health, metrics, storage | One integration each (pgx + goose, golang-jwt) | Users, its schema, Redis, config, routes |
+| Imports | Never a battery or the app | The core at most, never the app | Medusa, through its public packages only |
 
-The direction is one way: **the app depends on Medusa, Medusa never depends on the app**. If a change to Medusa needs an app type, the change belongs in the app.
+The direction is one way: **app -> batteries -> core**. If a change to Medusa needs an app type, the change belongs in the app.
 
-`go.work` at the root ties both modules to this checkout. `app/go.mod` also has `replace github.com/imlargo/medusa => ../`, so the app builds on its own too.
+`go.work` at the root ties every module to this checkout. `app/go.mod` and `auth/go.mod` also `replace` the Medusa modules with their local paths, so each builds on its own too.
 
 ## Where does my code go?
 
@@ -24,15 +24,19 @@ The direction is one way: **the app depends on Medusa, Medusa never depends on t
 |---|---|
 | Add an endpoint, a business rule, a table, a query | The app (see the recipes below) |
 | Change config or environment variables | `app/internal/config` (+ `app/.env.example`) |
-| Change auth, tokens or the user ID | `app/internal/auth` |
+| Change how tokens are signed, parsed or required | Medusa: `auth/` |
+| Change how the app issues tokens (expiry, login) | `app/internal/services/auth.go` |
 | Change how routes or middleware are wired | `app/cmd/api/bootstrap/routes.go` |
 | Add a dependency to the running app (a client, a pool) | `app/cmd/api/bootstrap/container.go` |
 | Change the response format or the error model | Medusa: `response.go`, `httperr/` |
+| Change the pool, migrations runner or test databases | Medusa: `postgres/` |
 | Add a generic middleware or helper any API could use | Medusa, if it passes the checklist below |
 
 When in doubt, put it in the app. Moving code into Medusa later is easy; taking an API out of a library is not.
 
 ### Medusa map
+
+Core:
 
 | Package | Holds |
 |---|---|
@@ -46,6 +50,14 @@ When in doubt, put it in the app. Moving code into Medusa later is easy; taking 
 | `metrics` | `NewHTTP(registry)`: Prometheus request metrics |
 | `storage` | S3/R2 object storage |
 
+Batteries:
+
+| Module | Holds |
+|---|---|
+| `postgres` | `Open(ctx, url, logger, opts...)`, `Migrate(ctx, url, migrations, logger)`, `Conn`, `IsNoRows`, `IsUniqueViolation` |
+| `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test |
+| `auth` | `NewJWT[S](secret, WithIssuer(...))`, `Sign`, `Parse`, `Middleware(j)`, `SubjectFrom[S](ctx)` |
+
 ### App map
 
 ```
@@ -54,10 +66,8 @@ app/
   cmd/api/bootstrap/            wiring: container.go (dependencies), routes.go (every route), app.go
   cmd/migrate/                  applies migrations, run as its own deploy step
   internal/config/              loads and validates env vars
-  internal/auth/                JWT, auth middleware, auth.UserID(ctx)
   internal/database/
-    dbtest/                     dbtest.New(t): a fresh migrated database per test
-    migrations/*.sql            goose migrations: the schema
+    migrations/                 goose migrations (the schema), embedded as migrations.FS
     queries/*.sql               sqlc queries
     sqlc/                       GENERATED by `make sqlc`, never edit
   internal/repositories/        sqlc rows -> models, driver errors -> ErrNotFound/ErrDuplicate
@@ -79,7 +89,7 @@ A request flows `routes.go` -> handler -> service -> repository -> sqlc -> Postg
 2. The logic as a method on a service in `app/internal/services`. Return `httperr` errors for what the client should see (`httperr.NotFound("user")`); anything else becomes a 500.
 3. A handler method in `app/internal/handlers` with the shape `func(ctx *medusa.Context, in *dto.X) (*dto.Y, error)`, plus its swag annotations.
 4. A new service or handler type is constructed in `buildServices` / `buildHandlers` in `container.go`.
-5. The route in `routes.go`, wrapped in the adapter for its verb: `medusa.HandleCreate(h.Create)`. Use `g.protected` when it needs a logged-in user, and read the user with `auth.UserID(ctx)`.
+5. The route in `routes.go`, wrapped in the adapter for its verb: `medusa.HandleCreate(h.Create)`. Use `g.protected` when it needs a logged-in user, and read the user with `auth.SubjectFrom[int64](ctx)`.
 6. `make docs`.
 
 ### Add a table or a query
@@ -87,9 +97,9 @@ A request flows `routes.go` -> handler -> service -> repository -> sqlc -> Postg
 1. A new numbered file in `app/internal/database/migrations` (`00002_create_x.sql`) starting with `-- +goose Up`. Never edit a migration that has been applied.
 2. The queries in `app/internal/database/queries/x.sql`, each with `-- name: Name :one|:many|:exec`.
 3. `make sqlc`.
-4. A repository in `app/internal/repositories` that maps the generated rows to a type in `internal/models` and passes errors through `classify`. Never return `sqlc` types past the repository.
+4. A repository in `app/internal/repositories` that maps the generated rows to a type in `internal/models` and passes errors through `classify` (which uses `postgres.IsNoRows` / `IsUniqueViolation`). Never return `sqlc` types past the repository.
 5. Add it to `store.Store`.
-6. A test next to the repository using `dbtest.New(t)` (see `repositories/user_test.go`).
+6. A test next to the repository using `pgtest.New(t, migrations.FS)` (see `repositories/user_test.go`).
 7. `make migrate` against your database.
 
 ### Write to several repositories atomically
@@ -114,7 +124,9 @@ Returning an error, or panicking, rolls everything back. A `WithTx` inside anoth
 
 ### Add something to Medusa
 
-Only if every answer is yes:
+A new **battery** is a new module: its own directory with a `go.mod`, added to `go.work` and, if the app uses it, to the app's `require` and `replace` and the `COPY` lines in `app/Dockerfile`. It is for an integration with a heavy or opinionated dependency that many APIs need. Its API may use that dependency's types.
+
+Code for the **core**, only if every answer is yes:
 
 - Would a different API, with different users and data, use it unchanged?
 - Does it avoid app concepts (users, IDs, config, a specific database)?
@@ -126,8 +138,8 @@ Then: add it with a test next to it, keep the exported surface small, and run th
 
 | Where | Command | Does |
 |---|---|---|
-| root | `go test ./... ./app/...` | Tests both modules (`./...` alone skips the app) |
-| root | `go vet ./... ./app/...` | Vets both modules |
+| root | `go test ./... ./auth/... ./postgres/... ./app/...` | Tests every module (`./...` alone is only the core) |
+| root | `go vet ./... ./auth/... ./postgres/... ./app/...` | Vets every module |
 | `app/` | `TEST_DATABASE_URL=postgres://... go test ./...` | Also runs the database tests (skipped without the URL) |
 | `app/` | `make run` / `make dev` | Runs the API / with hot reload |
 | `app/` | `make migrate` | Applies pending migrations |
@@ -137,7 +149,9 @@ Then: add it with a test next to it, keep the exported surface small, and run th
 
 ## Rules
 
-- Medusa never imports `github.com/imlargo/medusa/app`, GORM, a database driver, a config loader or a logger other than `log/slog`.
+- The core never imports a battery, the app, GORM, a database driver, a config loader or a logger other than `log/slog`.
+- A battery imports at most the core and its own integration, never the app or another battery.
+- Never run `go work sync`: it raises every module's dependencies to the highest version any of them uses.
 - Generated code (`app/internal/database/sqlc`, `app/api/docs`) is regenerated, never edited.
 - Migrations are additive and never run on API startup.
 - Errors the client sees are `httperr` values; internal causes go in `Internal` and reach the log, never the response.

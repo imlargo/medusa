@@ -1,14 +1,16 @@
 # Medusa
 
-Medusa is a set of small Go packages for building HTTP APIs on Gin. Each package does one job, takes standard library types, and can be used without the others. It is a toolkit, not a framework: it never owns `main`, holds no global state, and has no opinion on data access, configuration or identity.
+Medusa is a set of small Go packages for building HTTP APIs on Gin. The core does one job per package, takes standard library types, and can be used without the rest. Batteries for the parts most APIs need (Postgres, authentication) are separate modules: an app downloads only the ones it imports.
 
 ```sh
-go get github.com/imlargo/medusa
+go get github.com/imlargo/medusa            # core
+go get github.com/imlargo/medusa/postgres   # battery: pgx pool, goose migrations, test databases
+go get github.com/imlargo/medusa/auth       # battery: JWT and its middleware
 ```
 
 Requires Go 1.27. Medusa is pre-1.0, so minor versions may break the API; `v0.0.1` predates this layout.
 
-## Packages
+## Core packages
 
 | Package | What it does | Depends on Gin |
 |---|---|---|
@@ -21,6 +23,16 @@ Requires Go 1.27. Medusa is pre-1.0, so minor versions may break the API; `v0.0.
 | `job` | Periodic background work managed by `lifecycle`: no overlapping runs, panics contained, cancelled and awaited on shutdown | no |
 | `metrics` | HTTP request counters and histograms in Prometheus | no |
 | `storage` | S3-compatible object storage (Cloudflare R2), with key validation and bulk delete | no |
+
+## Batteries
+
+Each is its own module, with its own dependencies and versions. Choosing one is choosing its library, so its API uses that library's types.
+
+| Module | What it does | Brings in |
+|---|---|---|
+| `postgres` | `Open` (pool, ping, slow query log), `Migrate` (goose over any `fs.FS`), `Conn` (pool or transaction), `IsNoRows`, `IsUniqueViolation` | pgx v5, goose |
+| `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test on `TEST_DATABASE_URL` | (same module) |
+| `auth` | `JWT[S]` with a typed subject (`int64` or `string`) and optional issuer, `Middleware`, `SubjectFrom[S]` | golang-jwt v5 |
 
 ## Example
 
@@ -55,12 +67,13 @@ func run(ctx context.Context) error {
 
 ## Repository layout
 
-The repository holds two modules, tied together by a committed `go.work`:
+The repository holds several modules, tied together by a committed `go.work`:
 
-- `/` is the Medusa module, `github.com/imlargo/medusa`.
-- [`app/`](app/README.md) is an API built on it, `github.com/imlargo/medusa/app`. It is a working application and the starting point for new ones.
+- `/` is the core, `github.com/imlargo/medusa`.
+- `postgres/` and `auth/` are the batteries, `github.com/imlargo/medusa/postgres` and `github.com/imlargo/medusa/auth`.
+- [`app/`](app/README.md) is an API built on them, `github.com/imlargo/medusa/app`. It is a working application and the starting point for new ones.
 
-From the root, `go test ./... ./app/...` and `go vet ./... ./app/...` check both modules against this checkout. `./...` alone stops at the nested module.
+From the root, `go test ./... ./auth/... ./postgres/... ./app/...` checks every module against this checkout. `./...` alone stops at the nested modules.
 
 Where new code goes, step-by-step recipes and the repo rules are in [AGENTS.md](AGENTS.md). Project status is in [context.md](context.md).
 
