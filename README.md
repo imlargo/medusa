@@ -61,6 +61,8 @@ The repository holds two modules, tied together by a committed `go.work`:
 
 From the root, `go test ./... ./app/...` and `go vet ./... ./app/...` check both modules against this checkout. `./...` alone stops at the nested module.
 
+Where new code goes, step-by-step recipes and the repo rules are in [AGENTS.md](AGENTS.md). Project status is in [context.md](context.md).
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
