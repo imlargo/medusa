@@ -2,9 +2,8 @@
 // *gin.Context, adapters that turn handlers returning (result, error) into
 // gin.HandlerFunc, and the writers for the response format.
 //
-// Everything below this edge (httperr, health, httpserver, app, storage)
-// takes standard library types, so only this package and middleware depend
-// on Gin's API.
+// httperr, httpserver, lifecycle and storage take standard library types.
+// Only this package, middleware and the health probe handlers depend on Gin.
 //
 // A typical handler and its route:
 //

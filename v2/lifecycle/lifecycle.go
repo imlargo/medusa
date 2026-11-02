@@ -1,6 +1,7 @@
-// Package app runs one or more servers and owns their lifecycle: start hooks,
-// concurrent start, termination signals and an ordered, graceful shutdown.
-package app
+// Package lifecycle runs one or more servers and owns their lifecycle: start
+// hooks, concurrent start, termination signals and an ordered, graceful
+// shutdown.
+package lifecycle
 
 import (
 	"context"

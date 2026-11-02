@@ -1,6 +1,6 @@
-// Package httpserver runs an http.Handler with lifecycle management and
-// graceful shutdown. It implements app.Server, so app.App can manage it next
-// to other servers.
+// Package httpserver runs an http.Handler with graceful shutdown. It
+// implements lifecycle.Server, so lifecycle.App can manage it next to other
+// servers.
 //
 // Any http.Handler works; a *gin.Engine is one:
 //

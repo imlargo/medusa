@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imlargo/medusa/app"
+	"github.com/imlargo/medusa/lifecycle"
 )
 
-// Server is managed by app.App, so it must keep satisfying app.Server.
-var _ app.Server = (*Server)(nil)
+// Server is managed by lifecycle.App, so it must keep satisfying lifecycle.Server.
+var _ lifecycle.Server = (*Server)(nil)
 
 func quietLogger(t *testing.T) *slog.Logger {
 	t.Helper()
