@@ -14,7 +14,7 @@ flowchart LR
     end
     subgraph medusa["/ (github.com/imlargo/medusa)"]
         edge["medusa, middleware, health handlers (Gin)"]
-        core["httperr, httpserver, lifecycle, metrics, storage (stdlib types)"]
+        core["httperr, httpserver, lifecycle, job, metrics, storage (stdlib types)"]
     end
     app --> medusa
     edge --> core
@@ -73,7 +73,7 @@ Middleware runs in this order:
 |---|---|---|---|
 | 1 | `gin.Recovery` | all | A panic becomes a 500 instead of killing the process |
 | 2 | access log | all | One slog line per request, level by status |
-| 3 | `middleware.RequestID` | all | Reuses or generates `X-Request-ID`, echoed in the response and the body |
+| 3 | `middleware.RequestID` | all | Reuses a client `X-Request-ID` only if it is a valid UUID, otherwise generates one; echoed in the response and the body |
 | 4 | `middleware.CORS` | all | Configured origins plus the server's own URL |
 | 5 | `middleware.BodyLimit` | all | Bodies over `MAX_REQUEST_BODY_BYTES` fail with 413 |
 | 6 | `middleware.Metrics` | all, when enabled | Count and duration per route template |
@@ -104,11 +104,12 @@ flowchart LR
 ```
 
 - **Classified errors.** An `*httperr.Error` anywhere in the chain sets the response status and the stable `code`.
+- **Context errors.** A canceled request context means the client went away and answers 499. An expired deadline answers 503 with a retry message. Neither counts as a 500.
 - **Unclassified errors** become a 500 with a generic message.
 - **Internal causes** are added to Gin's error list. The access log prints them in its `error` field; the response body never contains them.
 - **Login failures** answer the same 401 whether the email exists or not.
 
-Response shapes:
+Response shapes (a nil slice in `data` is always sent as `[]`, never `null`):
 
 ```json
 {"status": 200, "success": true, "message": "ok", "data": {}, "request_id": "..."}
@@ -124,6 +125,8 @@ Response shapes:
 | Queries | Hand-written SQL in `internal/database/queries`, compiled by sqlc into typed Go code |
 | Query logging | Every statement in development; statements over 200 ms as warnings in any environment |
 | Readiness | `/ready` pings the pool and Redis concurrently, bounded by 5 s |
+| Transactions | `store.WithTx(ctx, fn)` gives `fn` a store whose repositories share one transaction; nested calls are savepoints |
+| Tests | `dbtest.New(t)` creates a migrated database per test on `TEST_DATABASE_URL` and drops it afterwards |
 
 The baseline migration (`00001`) matches the table GORM created, so existing databases adopt it without changes. The schema is the single source for both goose and sqlc, so the queries are checked against it at generation time.
 
@@ -136,12 +139,21 @@ The baseline migration (`00001`) matches the table GORM created, so existing dat
 - **Expiry.** The stream ends when the token expires; the client reconnects and resumes from its cursor.
 - **Retention.** Events are kept in memory for 5 minutes. This state is per process (see Scaling).
 
+## Background jobs
+
+Periodic work runs inside the process as a `job.Every`, registered with `lifecycle` like the HTTP server (the app has none yet).
+
+- **No overlap.** A run that outlasts the interval delays the next one.
+- **Failures are contained.** Errors and panics are logged with the job name and the schedule continues.
+- **Owned shutdown.** On shutdown the run's context is canceled and `lifecycle` waits for it, bounded by the job's stop timeout (10 s by default).
+- **Per process.** Every replica runs every job.
+
 ## Shutdown
 
 On SIGTERM, `lifecycle` runs this sequence within `SHUTDOWN_TIMEOUT` (10 s by default):
 
 1. **Drain SSE streams.** One third of the budget. Without this step, the HTTP server would wait on streams that never finish.
-2. **Stop the HTTP server.** The remaining two thirds. In-flight requests finish and new ones are refused.
+2. **Stop the servers.** The HTTP server gets the remaining two thirds: in-flight requests finish and new ones are refused. Jobs registered with `lifecycle` are canceled and waited for at the same step.
 3. **Close the container in reverse order:** rate limiter, then Redis, then the Postgres pool.
 
 `run` returns every error from these steps joined together, and the process exits non-zero if any occurred.
@@ -176,5 +188,6 @@ flowchart LR
 A few pieces of state live inside each process. They are fine for one replica and need attention before running several:
 
 - **Rate limiter counters** are per replica, unless the limiter is moved to a shared store.
+- **Background jobs** run on every replica.
 - **SSE events and sessions** are in memory: an event published on one replica does not reach a client connected to another.
 - **Readiness** checks the database. A database blip therefore takes every replica out of rotation at once.

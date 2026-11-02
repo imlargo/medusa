@@ -18,6 +18,7 @@ Requires Go 1.27. Medusa is pre-1.0, so minor versions may break the API; `v0.0.
 | `health` | Readiness checks as plain functions, plus `/health` and `/ready` handlers | handlers only |
 | `httpserver` | Serves any `http.Handler` with timeouts and graceful shutdown | no |
 | `lifecycle` | Runs servers, start and stop hooks, and shuts down on SIGINT/SIGTERM | no |
+| `job` | Periodic background work managed by `lifecycle`: no overlapping runs, panics contained, cancelled and awaited on shutdown | no |
 | `metrics` | HTTP request counters and histograms in Prometheus | no |
 | `storage` | S3-compatible object storage (Cloudflare R2), with key validation and bulk delete | no |
 

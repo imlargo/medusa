@@ -40,6 +40,15 @@ docker run --rm --env-file .env --entrypoint /usr/local/bin/migrate <image>   # 
 
 To change the schema, add the next numbered file to `internal/database/migrations`, then run `make sqlc` so the generated queries follow it.
 
+## Tests
+
+```sh
+go test ./...                                                                   # unit tests; database tests are skipped
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres go test ./...   # also the database tests
+```
+
+Database tests use `dbtest.New(t)`. It creates a database per test on that server, applies the migrations and drops it at the end. In CI, set `REQUIRE_DB_TESTS=1` so a missing database fails the run instead of skipping it.
+
 ## Code generation
 
 Generated code is committed and never edited by hand.
