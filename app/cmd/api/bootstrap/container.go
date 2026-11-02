@@ -15,11 +15,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/health"
 	"github.com/imlargo/medusa/metrics"
+	"github.com/imlargo/medusa/postgres"
 	"github.com/imlargo/medusa/storage"
 
-	"github.com/imlargo/medusa/app/internal/auth"
 	"github.com/imlargo/medusa/app/internal/config"
 	"github.com/imlargo/medusa/app/internal/database"
 	"github.com/imlargo/medusa/app/internal/handlers"
@@ -48,7 +49,7 @@ type Container struct {
 	// Infrastructure, always present.
 	DB    *pgxpool.Pool
 	Store *store.Store
-	JWT   *auth.JWT
+	JWT   *auth.JWT[int64]
 
 	// Infrastructure, optional.
 	RedisClient *redis.Client       // nil unless Redis is configured
@@ -148,9 +149,9 @@ func NewContainer(ctx context.Context, cfg *config.Config, opts Options) (*Conta
 func (c *Container) initInfrastructure(ctx context.Context, opts Options) error {
 	cfg := c.Config
 
-	db, err := database.NewPostgres(ctx, cfg.Database.URL, c.Logger,
+	db, err := postgres.Open(ctx, cfg.Database.URL, c.Logger,
 		// Statement logging only outside production: it writes user data.
-		database.WithQueryLogging(!cfg.Environment.IsProduction()),
+		postgres.WithQueryLogging(!cfg.Environment.IsProduction()),
 	)
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
@@ -163,7 +164,7 @@ func (c *Container) initInfrastructure(ctx context.Context, opts Options) error 
 
 	c.Store = store.New(db)
 
-	jwtAuth, err := auth.NewJWT(cfg.Auth.JwtSecret)
+	jwtAuth, err := auth.NewJWT[int64](cfg.Auth.JwtSecret, auth.WithIssuer(cfg.Auth.JwtIssuer))
 	if err != nil {
 		return fmt.Errorf("initialize jwt: %w", err)
 	}

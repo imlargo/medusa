@@ -14,10 +14,10 @@ import (
 	"github.com/imlargo/sse"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/health"
 	"github.com/imlargo/medusa/metrics"
 
-	"github.com/imlargo/medusa/app/internal/auth"
 	"github.com/imlargo/medusa/app/internal/config"
 	"github.com/imlargo/medusa/app/internal/handlers"
 )
@@ -32,7 +32,7 @@ func newTestContainer(t *testing.T, mutate func(*Container)) *Container {
 			Environment: config.EnvDevelopment,
 		},
 		Logger:          slog.New(slog.DiscardHandler),
-		JWT:             auth.MustNewJWT(strings.Repeat("s", 32)),
+		JWT:             auth.MustNewJWT[int64](strings.Repeat("s", 32)),
 		HealthService:   health.New(time.Second),
 		Events:          sse.NewBroker("events", sse.NewMemoryLog(sse.Retention{For: time.Minute})),
 		EventsLifecycle: sse.NewLifecycle(),

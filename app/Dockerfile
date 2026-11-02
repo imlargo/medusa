@@ -13,13 +13,16 @@ FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS build
 WORKDIR /src
 
 # The build context is the repository root, because the app compiles against
-# the Medusa module one directory up:
+# the Medusa core and batteries next to it:
 #
 #   docker build -f app/Dockerfile .
 #
 # Dependencies first: this layer is reused by every build that does not touch
-# a go.mod or go.sum.
+# a go.mod or go.sum. Every module the app replaces with a local path needs
+# its go.mod here.
 COPY go.mod go.sum ./
+COPY auth/go.mod auth/go.sum ./auth/
+COPY postgres/go.mod postgres/go.sum ./postgres/
 COPY app/go.mod app/go.sum ./app/
 WORKDIR /src/app
 RUN --mount=type=cache,target=/go/pkg/mod \

@@ -2,9 +2,9 @@ package handlers
 
 import (
 	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/httperr"
 
-	"github.com/imlargo/medusa/app/internal/auth"
 	"github.com/imlargo/medusa/app/internal/dto"
 	"github.com/imlargo/medusa/app/internal/models"
 	"github.com/imlargo/medusa/app/internal/services"
@@ -70,7 +70,7 @@ func (a *AuthHandler) Register(ctx *medusa.Context, in *dto.RegisterUser) (*dto.
 //	@Failure		500	{object}	medusa.ErrorResponse	"Internal Server Error"
 //	@Security		BearerAuth
 func (a *AuthHandler) GetUser(ctx *medusa.Context) (*models.User, error) {
-	userID, ok := auth.UserID(ctx)
+	userID, ok := auth.SubjectFrom[int64](ctx)
 	if !ok {
 		// Only reachable if the route is registered without the auth middleware.
 		return nil, httperr.Unauthorized("authentication required")

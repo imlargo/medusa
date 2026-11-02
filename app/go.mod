@@ -4,14 +4,14 @@ go 1.27.0
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/imlargo/medusa v0.0.0
+	github.com/imlargo/medusa/auth v0.0.0
+	github.com/imlargo/medusa/postgres v0.0.0
 	github.com/imlargo/ratelimit v0.1.1
 	github.com/imlargo/ratelimit/metrics/prometheus v0.1.1
 	github.com/imlargo/sse v0.1.0
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/joho/godotenv v1.5.1
-	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/swaggo/files v1.0.1
@@ -61,6 +61,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
@@ -75,6 +76,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
+	github.com/pressly/goose/v3 v3.28.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
@@ -98,5 +100,9 @@ require (
 )
 
 // The app is developed against the Medusa checkout it ships with. A project
-// copied out of this repo drops this line and requires a released version.
-replace github.com/imlargo/medusa => ../
+// copied out of this repo drops these lines and requires released versions.
+replace (
+	github.com/imlargo/medusa => ../
+	github.com/imlargo/medusa/auth => ../auth
+	github.com/imlargo/medusa/postgres => ../postgres
+)

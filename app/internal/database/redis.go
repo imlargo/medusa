@@ -1,3 +1,5 @@
+// Package database opens the Redis client the application can depend on.
+// Postgres comes from the github.com/imlargo/medusa/postgres battery.
 package database
 
 import (

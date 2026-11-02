@@ -4,14 +4,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/imlargo/medusa/app/internal/database/dbtest"
+	"github.com/imlargo/medusa/postgres/pgtest"
+
+	"github.com/imlargo/medusa/app/internal/database/migrations"
 	"github.com/imlargo/medusa/app/internal/repositories"
 	"github.com/imlargo/medusa/app/internal/store"
 )
 
 func TestWithTxCommitsWhenFnSucceeds(t *testing.T) {
 	t.Parallel()
-	s := store.New(dbtest.New(t))
+	s := store.New(pgtest.New(t, migrations.FS))
 	ctx := t.Context()
 
 	var id int64
@@ -31,7 +33,7 @@ func TestWithTxCommitsWhenFnSucceeds(t *testing.T) {
 
 func TestWithTxRollsBackWhenFnFails(t *testing.T) {
 	t.Parallel()
-	s := store.New(dbtest.New(t))
+	s := store.New(pgtest.New(t, migrations.FS))
 	ctx := t.Context()
 	boom := errors.New("boom")
 
@@ -53,7 +55,7 @@ func TestWithTxRollsBackWhenFnFails(t *testing.T) {
 // A nested WithTx is a savepoint: its failure undoes only its own writes.
 func TestNestedWithTxRollsBackOnlyTheSavepoint(t *testing.T) {
 	t.Parallel()
-	s := store.New(dbtest.New(t))
+	s := store.New(pgtest.New(t, migrations.FS))
 	ctx := t.Context()
 
 	err := s.WithTx(ctx, func(tx *store.Store) error {

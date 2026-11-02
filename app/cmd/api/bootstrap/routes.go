@@ -7,10 +7,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/middleware"
 
 	apidocs "github.com/imlargo/medusa/app/api/docs"
-	"github.com/imlargo/medusa/app/internal/auth"
 	"github.com/imlargo/medusa/app/internal/hosturl"
 )
 

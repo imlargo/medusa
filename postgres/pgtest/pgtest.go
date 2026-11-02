@@ -1,23 +1,24 @@
-// Package dbtest gives integration tests a real, migrated Postgres database.
+// Package pgtest gives integration tests a real, migrated Postgres database.
 //
 // Each call to New creates a fresh database on the server at
-// TEST_DATABASE_URL, applies every migration and drops it when the test ends,
+// TEST_DATABASE_URL, applies the migrations and drops it when the test ends,
 // so tests never share rows and can run in parallel:
 //
 //	func TestCreateUser(t *testing.T) {
-//	    pool := dbtest.New(t)
+//	    pool := pgtest.New(t, migrations.FS)
 //	    users := repositories.NewUserRepository(sqlc.New(pool))
 //	    ...
 //	}
 //
 // Without TEST_DATABASE_URL the test is skipped. Set REQUIRE_DB_TESTS=1 in CI
 // so a missing database fails the run instead of skipping it silently.
-package dbtest
+package pgtest
 
 import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/url"
 	"os"
@@ -28,32 +29,34 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/imlargo/medusa/app/internal/database"
+	"github.com/imlargo/medusa/postgres"
 )
 
 const (
-	// envURL points at a Postgres server the tests may create databases on,
+	// EnvURL points at a Postgres server the tests may create databases on,
 	// for example postgres://postgres:postgres@localhost:5432/postgres.
-	envURL = "TEST_DATABASE_URL"
+	EnvURL = "TEST_DATABASE_URL"
 
-	// envRequire turns a missing envURL into a failure instead of a skip.
-	envRequire = "REQUIRE_DB_TESTS"
+	// EnvRequire, set to 1, turns a missing EnvURL into a failure instead of
+	// a skip.
+	EnvRequire = "REQUIRE_DB_TESTS"
 
 	// setupTimeout bounds creating and migrating one database.
 	setupTimeout = 30 * time.Second
 )
 
-// New returns a pool connected to a new database with every migration
-// applied. The pool is closed and the database dropped when t ends.
-func New(t testing.TB) *pgxpool.Pool {
+// New returns a pool connected to a new database with every migration in
+// migrations applied (see postgres.Migrate). The pool is closed and the
+// database dropped when t ends.
+func New(t testing.TB, migrations fs.FS) *pgxpool.Pool {
 	t.Helper()
 
-	serverURL := os.Getenv(envURL)
+	serverURL := os.Getenv(EnvURL)
 	if serverURL == "" {
-		if os.Getenv(envRequire) == "1" {
-			t.Fatalf("%s is not set and %s=1 requires database tests to run", envURL, envRequire)
+		if os.Getenv(EnvRequire) == "1" {
+			t.Fatalf("%s is not set and %s=1 requires database tests to run", EnvURL, EnvRequire)
 		}
-		t.Skipf("set %s to run database tests", envURL)
+		t.Skipf("set %s to run database tests", EnvURL)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), setupTimeout)
@@ -61,7 +64,7 @@ func New(t testing.TB) *pgxpool.Pool {
 
 	admin, err := pgx.Connect(ctx, serverURL)
 	if err != nil {
-		t.Fatalf("connect to %s: %v", envURL, err)
+		t.Fatalf("connect to %s: %v", EnvURL, err)
 	}
 	defer func() { _ = admin.Close(context.Background()) }()
 
@@ -78,11 +81,11 @@ func New(t testing.TB) *pgxpool.Pool {
 	}
 
 	logger := slog.New(slog.DiscardHandler)
-	if err := database.Migrate(ctx, dbURL, logger); err != nil {
+	if err := postgres.Migrate(ctx, dbURL, migrations, logger); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 
-	pool, err := database.NewPostgres(ctx, dbURL, logger)
+	pool, err := postgres.Open(ctx, dbURL, logger)
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
@@ -96,7 +99,7 @@ func withDatabase(serverURL, name string) (string, error) {
 	u, err := url.Parse(serverURL)
 	if err != nil {
 		// The parse error would quote the URL, and the URL carries the password.
-		return "", fmt.Errorf("%s is not a valid URL", envURL)
+		return "", fmt.Errorf("%s is not a valid URL", EnvURL)
 	}
 	u.Path = "/" + name
 	return u.String(), nil

@@ -7,25 +7,21 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/imlargo/medusa/postgres"
+
 	"github.com/imlargo/medusa/app/internal/database/sqlc"
 	"github.com/imlargo/medusa/app/internal/repositories"
 )
 
-// conn is what the repositories run on: the pool, or a transaction opened on
-// it. Both can begin a transaction; inside one, Begin opens a savepoint.
-type conn interface {
-	sqlc.DBTX
-	Begin(ctx context.Context) (pgx.Tx, error)
-}
-
 // Store holds one repository per aggregate.
 type Store struct {
-	conn  conn
+	conn  postgres.Conn
 	Users repositories.UserRepository
 }
 
-// New builds the repositories over conn, normally the *pgxpool.Pool.
-func New(conn conn) *Store {
+// New builds the repositories over conn: the *pgxpool.Pool, or a transaction
+// opened on it.
+func New(conn postgres.Conn) *Store {
 	queries := sqlc.New(conn)
 
 	return &Store{

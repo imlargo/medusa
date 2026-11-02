@@ -47,7 +47,7 @@ go test ./...                                                                   
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres go test ./...   # also the database tests
 ```
 
-Database tests use `dbtest.New(t)`. It creates a database per test on that server, applies the migrations and drops it at the end. In CI, set `REQUIRE_DB_TESTS=1` so a missing database fails the run instead of skipping it.
+Database tests use `pgtest.New(t, migrations.FS)` from the `postgres` battery. It creates a database per test on that server, applies the migrations and drops it at the end. In CI, set `REQUIRE_DB_TESTS=1` so a missing database fails the run instead of skipping it.
 
 ## Code generation
 

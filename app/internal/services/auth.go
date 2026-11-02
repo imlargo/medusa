@@ -8,9 +8,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/httperr"
 
-	"github.com/imlargo/medusa/app/internal/auth"
 	"github.com/imlargo/medusa/app/internal/dto"
 	"github.com/imlargo/medusa/app/internal/models"
 	"github.com/imlargo/medusa/app/internal/repositories"
@@ -24,11 +24,11 @@ type AuthService interface {
 
 type authService struct {
 	*Service
-	jwtAuth     *auth.JWT
+	jwtAuth     *auth.JWT[int64]
 	userService UserService
 }
 
-func NewAuthService(container *Service, userSrv UserService, jwtAuth *auth.JWT) AuthService {
+func NewAuthService(container *Service, userSrv UserService, jwtAuth *auth.JWT[int64]) AuthService {
 	return &authService{
 		Service:     container,
 		userService: userSrv,
@@ -66,12 +66,12 @@ func (s *authService) LoginWithPassword(ctx context.Context, email, password str
 
 	accessExpiration := time.Now().Add(s.config.Auth.TokenExpiration)
 	refreshExpiration := time.Now().Add(s.config.Auth.RefreshExpiration)
-	accessToken, err := s.jwtAuth.GenerateToken(user.ID, accessExpiration)
+	accessToken, err := s.jwtAuth.Sign(user.ID, accessExpiration)
 	if err != nil {
 		return nil, httperr.InternalWithMessage("could not issue the access token", err)
 	}
 
-	refreshToken, err := s.jwtAuth.GenerateToken(user.ID, refreshExpiration)
+	refreshToken, err := s.jwtAuth.Sign(user.ID, refreshExpiration)
 	if err != nil {
 		return nil, httperr.InternalWithMessage("could not issue the refresh token", err)
 	}
@@ -96,12 +96,12 @@ func (s *authService) RegisterWithPassword(ctx context.Context, user *dto.Regist
 
 	accessExpiration := time.Now().Add(s.config.Auth.TokenExpiration)
 	refreshExpiration := time.Now().Add(s.config.Auth.RefreshExpiration)
-	accessToken, err := s.jwtAuth.GenerateToken(createdUser.ID, accessExpiration)
+	accessToken, err := s.jwtAuth.Sign(createdUser.ID, accessExpiration)
 	if err != nil {
 		return nil, httperr.InternalWithMessage("could not issue the access token", err)
 	}
 
-	refreshToken, err := s.jwtAuth.GenerateToken(createdUser.ID, refreshExpiration)
+	refreshToken, err := s.jwtAuth.Sign(createdUser.ID, refreshExpiration)
 	if err != nil {
 		return nil, httperr.InternalWithMessage("could not issue the refresh token", err)
 	}

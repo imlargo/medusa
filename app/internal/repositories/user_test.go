@@ -4,14 +4,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/imlargo/medusa/app/internal/database/dbtest"
+	"github.com/imlargo/medusa/postgres/pgtest"
+
+	"github.com/imlargo/medusa/app/internal/database/migrations"
 	"github.com/imlargo/medusa/app/internal/database/sqlc"
 	"github.com/imlargo/medusa/app/internal/repositories"
 )
 
 func newUsers(t *testing.T) repositories.UserRepository {
 	t.Helper()
-	return repositories.NewUserRepository(sqlc.New(dbtest.New(t)))
+	return repositories.NewUserRepository(sqlc.New(pgtest.New(t, migrations.FS)))
 }
 
 func TestUserRepositoryRoundTrip(t *testing.T) {

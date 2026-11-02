@@ -10,8 +10,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/imlargo/medusa/postgres"
+
 	"github.com/imlargo/medusa/app/internal/config"
-	"github.com/imlargo/medusa/app/internal/database"
+	"github.com/imlargo/medusa/app/internal/database/migrations"
 )
 
 func main() {
@@ -34,5 +36,5 @@ func run() error {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 
-	return database.Migrate(ctx, cfg.Database.URL, logger)
+	return postgres.Migrate(ctx, cfg.Database.URL, migrations.FS, logger)
 }

@@ -9,9 +9,8 @@ import (
 	"github.com/imlargo/sse"
 
 	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/httperr"
-
-	"github.com/imlargo/medusa/app/internal/auth"
 )
 
 // EventsHandler streams server-sent events to authenticated users.
@@ -22,12 +21,12 @@ import (
 type EventsHandler struct {
 	broker    *sse.Broker
 	lifecycle *sse.Lifecycle
-	jwt       *auth.JWT
+	jwt       *auth.JWT[int64]
 }
 
 // NewEventsHandler wires a handler onto an existing broker. The lifecycle is
 // what lets shutdown drain open streams instead of severing them.
-func NewEventsHandler(broker *sse.Broker, lifecycle *sse.Lifecycle, jwtAuth *auth.JWT) *EventsHandler {
+func NewEventsHandler(broker *sse.Broker, lifecycle *sse.Lifecycle, jwtAuth *auth.JWT[int64]) *EventsHandler {
 	return &EventsHandler{
 		broker:    broker,
 		lifecycle: lifecycle,
@@ -64,20 +63,17 @@ func (h *EventsHandler) authorize(r *http.Request) (sse.Grant, error) {
 		return sse.Grant{}, sse.Unauthorized(err.Error())
 	}
 
-	claims, err := h.jwt.ParseToken(token)
+	claims, err := h.jwt.Parse(token)
 	if err != nil {
 		return sse.Grant{}, sse.Unauthorized("invalid or expired token")
 	}
 
 	grant := sse.Grant{
-		Identity: fmt.Sprintf("user:%d", claims.UserID),
-		Filters:  []sse.Filter{sse.MustFilter(fmt.Sprintf("user.%d.>", claims.UserID))},
-	}
-
-	// End the stream when the access token expires. The client reconnects with a
-	// fresh token and resumes from its cursor, so nothing is missed.
-	if claims.ExpiresAt != nil {
-		grant.Deadline = claims.ExpiresAt.Time
+		Identity: fmt.Sprintf("user:%d", claims.Subject),
+		Filters:  []sse.Filter{sse.MustFilter(fmt.Sprintf("user.%d.>", claims.Subject))},
+		// End the stream when the access token expires. The client reconnects
+		// with a fresh token and resumes from its cursor, so nothing is missed.
+		Deadline: claims.ExpiresAt,
 	}
 
 	return grant, nil
@@ -88,7 +84,7 @@ func (h *EventsHandler) authorize(r *http.Request) (sse.Grant, error) {
 // It exists to make the endpoint above easy to try out; a real application would
 // publish from the service that owns the event, not from an HTTP handler.
 func (h *EventsHandler) Publish(ctx *medusa.Context, in *PublishEventRequest) (*PublishEventResponse, error) {
-	userID, ok := auth.UserID(ctx)
+	userID, ok := auth.SubjectFrom[int64](ctx)
 	if !ok {
 		return nil, httperr.Unauthorized("authentication required")
 	}

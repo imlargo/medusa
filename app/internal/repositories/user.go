@@ -7,15 +7,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/imlargo/medusa/postgres"
 
 	"github.com/imlargo/medusa/app/internal/database/sqlc"
 	"github.com/imlargo/medusa/app/internal/models"
 )
-
-// uniqueViolation is the Postgres SQLSTATE for a broken unique constraint.
-const uniqueViolation = "23505"
 
 var (
 	// ErrNotFound means no row matched.
@@ -86,10 +82,10 @@ func toUser(row sqlc.User) *models.User {
 // classify maps the driver errors callers branch on to this package's
 // sentinels, and wraps everything else with the operation that failed.
 func classify(op string, err error) error {
-	if errors.Is(err, pgx.ErrNoRows) {
+	if postgres.IsNoRows(err) {
 		return fmt.Errorf("%s: %w", op, ErrNotFound)
 	}
-	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == uniqueViolation {
+	if postgres.IsUniqueViolation(err) {
 		return fmt.Errorf("%s: %w", op, ErrDuplicate)
 	}
 	return fmt.Errorf("%s: %w", op, err)
