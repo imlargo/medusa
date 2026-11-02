@@ -1,4 +1,6 @@
-package handlers
+// Package events streams server-sent events to signed-in users and decides
+// who may read which topics.
+package events
 
 import (
 	"fmt"
@@ -9,25 +11,28 @@ import (
 	"github.com/imlargo/sse"
 
 	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/apperr"
 	"github.com/imlargo/medusa/auth"
-	"github.com/imlargo/medusa/httperr"
 )
 
-// EventsHandler streams server-sent events to authenticated users.
+// ErrPublishFailed: the event could not be appended to the log.
+var ErrPublishFailed = apperr.Internal("events.publish_failed", "could not publish the event")
+
+// Handler streams server-sent events to authenticated users.
 //
 // The whole transport (headers, flushing, heartbeats, write deadlines,
 // reconnection and replay) belongs to the sse package. What is left here is the
 // only part that is application-specific: deciding who may read which topics.
-type EventsHandler struct {
+type Handler struct {
 	broker    *sse.Broker
 	lifecycle *sse.Lifecycle
 	jwt       *auth.JWT[int64]
 }
 
-// NewEventsHandler wires a handler onto an existing broker. The lifecycle is
+// NewHandler wires a handler onto an existing broker. The lifecycle is
 // what lets shutdown drain open streams instead of severing them.
-func NewEventsHandler(broker *sse.Broker, lifecycle *sse.Lifecycle, jwtAuth *auth.JWT[int64]) *EventsHandler {
-	return &EventsHandler{
+func NewHandler(broker *sse.Broker, lifecycle *sse.Lifecycle, jwtAuth *auth.JWT[int64]) *Handler {
+	return &Handler{
 		broker:    broker,
 		lifecycle: lifecycle,
 		jwt:       jwtAuth,
@@ -47,7 +52,7 @@ func UserTopic(userID int64, kind string) sse.Topic {
 // decide the subscriber's filters in one place, and set a Deadline from the
 // token's own expiry, so a session ends when the credential does instead of
 // outliving it.
-func (h *EventsHandler) Stream() gin.HandlerFunc {
+func (h *Handler) Stream() gin.HandlerFunc {
 	return gin.WrapH(h.broker.Handler(
 		sse.WithAuthorizer(h.authorize),
 		sse.WithLifecycle(h.lifecycle),
@@ -57,7 +62,7 @@ func (h *EventsHandler) Stream() gin.HandlerFunc {
 // authorize resolves the caller's identity from their token and confines them to
 // their own topics. A subscriber asking for anything outside user.<id>.> gets it
 // reported as denied rather than silently dropped.
-func (h *EventsHandler) authorize(r *http.Request) (sse.Grant, error) {
+func (h *Handler) authorize(r *http.Request) (sse.Grant, error) {
 	token, err := bearerToken(r)
 	if err != nil {
 		return sse.Grant{}, sse.Unauthorized(err.Error())
@@ -83,15 +88,16 @@ func (h *EventsHandler) authorize(r *http.Request) (sse.Grant, error) {
 //
 // It exists to make the endpoint above easy to try out; a real application would
 // publish from the service that owns the event, not from an HTTP handler.
-func (h *EventsHandler) Publish(ctx *medusa.Context, in *PublishEventRequest) (*PublishEventResponse, error) {
+func (h *Handler) Publish(ctx *medusa.Context, in *PublishEventRequest) (*PublishEventResponse, error) {
 	userID, ok := auth.SubjectFrom[int64](ctx)
 	if !ok {
-		return nil, httperr.Unauthorized("authentication required")
+		// Only reachable if the route is registered without auth.Middleware.
+		return nil, medusa.ErrMissingCredentials
 	}
 
 	offset, err := h.broker.Publish(ctx.Ctx(), UserTopic(userID, "notifications"), in.Data, sse.Name(in.Event))
 	if err != nil {
-		return nil, httperr.InternalWithMessage("could not publish the event", err)
+		return nil, ErrPublishFailed.WithCause(err)
 	}
 
 	return &PublishEventResponse{Offset: uint64(offset)}, nil

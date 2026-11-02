@@ -1,4 +1,5 @@
-// Package store groups the repositories the services use.
+// Package store groups the repositories of every feature, so writes across
+// features can share one transaction.
 package store
 
 import (
@@ -10,13 +11,13 @@ import (
 	"github.com/imlargo/medusa/postgres"
 
 	"github.com/imlargo/medusa/app/internal/database/sqlc"
-	"github.com/imlargo/medusa/app/internal/repositories"
+	"github.com/imlargo/medusa/app/internal/user"
 )
 
 // Store holds one repository per aggregate.
 type Store struct {
 	conn  postgres.Conn
-	Users repositories.UserRepository
+	Users *user.Repository
 }
 
 // New builds the repositories over conn: the *pgxpool.Pool, or a transaction
@@ -26,7 +27,7 @@ func New(conn postgres.Conn) *Store {
 
 	return &Store{
 		conn:  conn,
-		Users: repositories.NewUserRepository(queries),
+		Users: user.NewRepository(queries),
 	}
 }
 

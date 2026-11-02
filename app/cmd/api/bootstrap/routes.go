@@ -109,7 +109,7 @@ func registerRoutes(router *gin.Engine, c *Container) {
 		protected: v1.Group("", auth.Middleware(c.JWT)),
 	}
 
-	registerAuthRoutes(groups, c)
+	registerAccountRoutes(groups, c)
 	registerEventRoutes(groups, c)
 }
 
@@ -121,13 +121,13 @@ func allowedOrigins(c *Container) []string {
 	return append(origins, hosturl.Complete(c.Config.Server.Host))
 }
 
-func registerAuthRoutes(g apiGroups, c *Container) {
+func registerAccountRoutes(g apiGroups, c *Container) {
 	public := g.public.Group("/auth")
-	public.POST("/login", medusa.Handle(c.Handlers.Auth.LoginWithPassword))
-	public.POST("/register", medusa.HandleCreate(c.Handlers.Auth.Register))
+	public.POST("/login", medusa.Handle(c.Handlers.Account.Login))
+	public.POST("/register", medusa.HandleCreate(c.Handlers.Account.Register))
 
 	protected := g.protected.Group("/auth")
-	protected.GET("/user", medusa.HandleGet(c.Handlers.Auth.GetUser))
+	protected.GET("/user", medusa.HandleGet(c.Handlers.Account.Me))
 }
 
 func registerEventRoutes(g apiGroups, c *Container) {

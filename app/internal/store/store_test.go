@@ -7,8 +7,8 @@ import (
 	"github.com/imlargo/medusa/postgres/pgtest"
 
 	"github.com/imlargo/medusa/app/internal/database/migrations"
-	"github.com/imlargo/medusa/app/internal/repositories"
 	"github.com/imlargo/medusa/app/internal/store"
+	"github.com/imlargo/medusa/app/internal/user"
 )
 
 func TestWithTxCommitsWhenFnSucceeds(t *testing.T) {
@@ -47,7 +47,7 @@ func TestWithTxRollsBackWhenFnFails(t *testing.T) {
 		t.Fatalf("WithTx() = %v, want it to wrap %v", err, boom)
 	}
 
-	if _, err := s.Users.GetByEmail(ctx, "rollback@example.com"); !errors.Is(err, repositories.ErrNotFound) {
+	if _, err := s.Users.GetByEmail(ctx, "rollback@example.com"); !errors.Is(err, user.ErrNotFound) {
 		t.Errorf("GetByEmail() after rollback = %v, want ErrNotFound", err)
 	}
 }
@@ -81,7 +81,7 @@ func TestNestedWithTxRollsBackOnlyTheSavepoint(t *testing.T) {
 	if _, err := s.Users.GetByEmail(ctx, "outer@example.com"); err != nil {
 		t.Errorf("outer write = %v, want it committed", err)
 	}
-	if _, err := s.Users.GetByEmail(ctx, "inner@example.com"); !errors.Is(err, repositories.ErrNotFound) {
+	if _, err := s.Users.GetByEmail(ctx, "inner@example.com"); !errors.Is(err, user.ErrNotFound) {
 		t.Errorf("inner write = %v, want it rolled back", err)
 	}
 }

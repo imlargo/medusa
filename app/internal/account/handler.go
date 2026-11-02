@@ -1,30 +1,36 @@
-package handlers
+package account
 
 import (
 	"github.com/imlargo/medusa"
 	"github.com/imlargo/medusa/auth"
-	"github.com/imlargo/medusa/httperr"
 
-	"github.com/imlargo/medusa/app/internal/dto"
-	"github.com/imlargo/medusa/app/internal/models"
-	"github.com/imlargo/medusa/app/internal/services"
+	"github.com/imlargo/medusa/app/internal/user"
 )
 
-// AuthHandler serves the authentication endpoints.
-//
-// Every method returns its result and its error. Binding, validation, status
-// selection and response rendering are handled by the medusa.Handle adapters the
-// routes wrap these in, so nothing here writes to the response.
-type AuthHandler struct {
-	authService services.AuthService
+// LoginRequest is the body of a password login.
+type LoginRequest struct {
+	Email    string `json:"email"    binding:"required,email"`
+	Password string `json:"password" binding:"required"`
 }
 
-// NewAuthHandler serves the authentication endpoints through authService.
-func NewAuthHandler(authService services.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+// RegisterRequest is the body of a registration.
+type RegisterRequest struct {
+	Email    string `json:"email"    binding:"required,email"`
+	Password string `json:"password" binding:"required"`
 }
 
-// LoginWithPassword exchanges credentials for a token pair.
+// Handler serves the account endpoints. Each method returns its result and
+// its error; the medusa.Handle adapters bind, validate and render them.
+type Handler struct {
+	service *Service
+}
+
+// NewHandler serves the account endpoints through service.
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
+}
+
+// Login exchanges credentials for a session.
 //
 //	@Summary		Login user
 //	@Router			/v1/auth/login [post]
@@ -32,16 +38,16 @@ func NewAuthHandler(authService services.AuthService) *AuthHandler {
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			payload	body		dto.LoginWithPassword	true	"Credentials"
-//	@Success		200		{object}	medusa.SuccessResponse{data=dto.AuthResponse}	"Logged in"
-//	@Failure		400		{object}	medusa.ErrorResponse	"Bad Request"
-//	@Failure		401		{object}	medusa.ErrorResponse	"Invalid credentials"
-//	@Failure		500		{object}	medusa.ErrorResponse	"Internal Server Error"
-func (a *AuthHandler) LoginWithPassword(ctx *medusa.Context, in *dto.LoginWithPassword) (*dto.AuthResponse, error) {
-	return a.authService.LoginWithPassword(ctx.Ctx(), in.Email, in.Password)
+//	@Param			payload	body		account.LoginRequest							true	"Credentials"
+//	@Success		200		{object}	medusa.SuccessResponse{data=account.Session}	"Logged in"
+//	@Failure		400		{object}	httperr.Problem									"request.validation_failed"
+//	@Failure		401		{object}	httperr.Problem									"account.invalid_credentials"
+//	@Failure		500		{object}	httperr.Problem									"Internal Server Error"
+func (h *Handler) Login(ctx *medusa.Context, in *LoginRequest) (*Session, error) {
+	return h.service.Login(ctx.Ctx(), in.Email, in.Password)
 }
 
-// Register creates an account and returns a token pair for it.
+// Register creates an account and returns a session for it.
 //
 //	@Summary		Register user
 //	@Router			/v1/auth/register [post]
@@ -49,32 +55,33 @@ func (a *AuthHandler) LoginWithPassword(ctx *medusa.Context, in *dto.LoginWithPa
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			payload	body		dto.RegisterUser	true	"Registration payload"
-//	@Success		201		{object}	medusa.SuccessResponse{data=dto.AuthResponse}	"Registered"
-//	@Failure		400		{object}	medusa.ErrorResponse	"Bad Request"
-//	@Failure		409		{object}	medusa.ErrorResponse	"Email already registered"
-//	@Failure		500		{object}	medusa.ErrorResponse	"Internal Server Error"
-func (a *AuthHandler) Register(ctx *medusa.Context, in *dto.RegisterUser) (*dto.AuthResponse, error) {
-	return a.authService.RegisterWithPassword(ctx.Ctx(), in)
+//	@Param			payload	body		account.RegisterRequest							true	"Registration payload"
+//	@Success		201		{object}	medusa.SuccessResponse{data=account.Session}	"Registered"
+//	@Failure		400		{object}	httperr.Problem									"request.validation_failed"
+//	@Failure		409		{object}	httperr.Problem									"user.email_taken"
+//	@Failure		500		{object}	httperr.Problem									"Internal Server Error"
+func (h *Handler) Register(ctx *medusa.Context, in *RegisterRequest) (*Session, error) {
+	return h.service.Register(ctx.Ctx(), in.Email, in.Password)
 }
 
-// GetUser returns the authenticated user.
+// Me returns the signed-in user.
 //
 //	@Summary		Get user info
 //	@Router			/v1/auth/user [get]
 //	@Description	Get the authenticated user's information
 //	@Tags			auth
 //	@Produce		json
-//	@Success		200	{object}	medusa.SuccessResponse{data=models.User}	"The authenticated user"
-//	@Failure		401	{object}	medusa.ErrorResponse	"Unauthorized"
-//	@Failure		500	{object}	medusa.ErrorResponse	"Internal Server Error"
+//	@Success		200	{object}	medusa.SuccessResponse{data=user.User}	"The authenticated user"
+//	@Failure		401	{object}	httperr.Problem							"auth.invalid_token"
+//	@Failure		404	{object}	httperr.Problem							"user.not_found"
+//	@Failure		500	{object}	httperr.Problem							"Internal Server Error"
 //	@Security		BearerAuth
-func (a *AuthHandler) GetUser(ctx *medusa.Context) (*models.User, error) {
+func (h *Handler) Me(ctx *medusa.Context) (*user.User, error) {
 	userID, ok := auth.SubjectFrom[int64](ctx)
 	if !ok {
-		// Only reachable if the route is registered without the auth middleware.
-		return nil, httperr.Unauthorized("authentication required")
+		// Only reachable if the route is registered without auth.Middleware.
+		return nil, medusa.ErrMissingCredentials
 	}
 
-	return a.authService.GetUser(ctx.Ctx(), userID)
+	return h.service.Me(ctx.Ctx(), userID)
 }

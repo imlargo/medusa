@@ -14,12 +14,14 @@ import (
 	"github.com/imlargo/sse"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/imlargo/medusa"
 	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/health"
+	"github.com/imlargo/medusa/httperr"
 	"github.com/imlargo/medusa/metrics"
 
 	"github.com/imlargo/medusa/app/internal/config"
-	"github.com/imlargo/medusa/app/internal/handlers"
+	"github.com/imlargo/medusa/app/internal/events"
 )
 
 // newTestContainer builds a container with only the pieces the router touches,
@@ -42,7 +44,7 @@ func newTestContainer(t *testing.T, mutate func(*Container)) *Container {
 
 	c.Handlers = &Handlers{
 		Health: health.NewHandler(c.HealthService),
-		Events: handlers.NewEventsHandler(c.Events, c.EventsLifecycle, c.JWT),
+		Events: events.NewHandler(c.Events, c.EventsLifecycle, c.JWT),
 	}
 
 	if mutate != nil {
@@ -104,11 +106,19 @@ func TestMetricsEndpointFollowsTheMetricsService(t *testing.T) {
 	})
 }
 
+// A rejected request is an RFC 9457 problem carrying the stable code.
 func TestProtectedRoutesRequireAToken(t *testing.T) {
 	router := newRouter(newTestContainer(t, nil))
 
-	if got := get(t, router, "/v1/auth/user").Code; got != http.StatusUnauthorized {
-		t.Errorf("GET /v1/auth/user = %d, want %d", got, http.StatusUnauthorized)
+	rec := get(t, router, "/v1/auth/user")
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("GET /v1/auth/user = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+	if got := rec.Header().Get("Content-Type"); got != httperr.ContentType {
+		t.Errorf("Content-Type = %q, want %q", got, httperr.ContentType)
+	}
+	if want := `"code":"` + medusa.ErrMissingCredentials.Code() + `"`; !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("body = %s, want %s", rec.Body, want)
 	}
 }
 

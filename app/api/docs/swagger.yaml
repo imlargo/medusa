@@ -1,36 +1,12 @@
 definitions:
-  github_com_imlargo_medusa_app_internal_dto.AuthResponse:
+  apperr.FieldError:
     properties:
-      tokens:
-        $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.AuthTokens'
-      user:
-        $ref: '#/definitions/github_com_imlargo_medusa_app_internal_models.User'
-    type: object
-  github_com_imlargo_medusa_app_internal_dto.AuthTokens:
-    properties:
-      access_token:
+      field:
         type: string
-      refresh_token:
+      message:
         type: string
     type: object
-  github_com_imlargo_medusa_app_internal_dto.LoginWithPassword:
-    properties:
-      email:
-        type: string
-      password:
-        type: string
-    required:
-    - email
-    - password
-    type: object
-  github_com_imlargo_medusa_app_internal_dto.RegisterUser:
-    properties:
-      email:
-        type: string
-      password:
-        type: string
-    type: object
-  github_com_imlargo_medusa_app_internal_models.User:
+  github_com_imlargo_medusa_app_internal_user.User:
     properties:
       created_at:
         type: string
@@ -41,41 +17,58 @@ definitions:
       updated_at:
         type: string
     type: object
-  httperr.Code:
-    enum:
-    - BAD_REQUEST
-    - VALIDATION_FAILED
-    - UNAUTHORIZED
-    - FORBIDDEN
-    - NOT_FOUND
-    - CONFLICT
-    - PAYLOAD_TOO_LARGE
-    - TOO_MANY_REQUESTS
-    - INTERNAL_SERVER_ERROR
-    - SERVICE_UNAVAILABLE
-    type: string
-    x-enum-varnames:
-    - CodeBadRequest
-    - CodeValidation
-    - CodeUnauthorized
-    - CodeForbidden
-    - CodeNotFound
-    - CodeConflict
-    - CodePayloadTooLarge
-    - CodeTooManyRequests
-    - CodeInternal
-    - CodeServiceUnavailable
-  medusa.ErrorResponse:
+  httperr.Problem:
     properties:
       code:
-        $ref: '#/definitions/httperr.Code'
-      details: {}
-      error:
         type: string
+      detail:
+        type: string
+      errors:
+        items:
+          $ref: '#/definitions/apperr.FieldError'
+        type: array
       request_id:
         type: string
       status:
         type: integer
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  internal_account.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_account.RegisterRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_account.Session:
+    properties:
+      tokens:
+        $ref: '#/definitions/internal_account.Tokens'
+      user:
+        $ref: '#/definitions/github_com_imlargo_medusa_app_internal_user.User'
+    type: object
+  internal_account.Tokens:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
     type: object
   medusa.SuccessResponse:
     properties:
@@ -111,7 +104,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.LoginWithPassword'
+          $ref: '#/definitions/internal_account.LoginRequest'
       produces:
       - application/json
       responses:
@@ -122,20 +115,20 @@ paths:
             - $ref: '#/definitions/medusa.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.AuthResponse'
+                  $ref: '#/definitions/internal_account.Session'
               type: object
         "400":
-          description: Bad Request
+          description: request.validation_failed
           schema:
-            $ref: '#/definitions/medusa.ErrorResponse'
+            $ref: '#/definitions/httperr.Problem'
         "401":
-          description: Invalid credentials
+          description: account.invalid_credentials
           schema:
-            $ref: '#/definitions/medusa.ErrorResponse'
+            $ref: '#/definitions/httperr.Problem'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/medusa.ErrorResponse'
+            $ref: '#/definitions/httperr.Problem'
       summary: Login user
       tags:
       - auth
@@ -150,7 +143,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.RegisterUser'
+          $ref: '#/definitions/internal_account.RegisterRequest'
       produces:
       - application/json
       responses:
@@ -161,20 +154,20 @@ paths:
             - $ref: '#/definitions/medusa.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.AuthResponse'
+                  $ref: '#/definitions/internal_account.Session'
               type: object
         "400":
-          description: Bad Request
+          description: request.validation_failed
           schema:
-            $ref: '#/definitions/medusa.ErrorResponse'
+            $ref: '#/definitions/httperr.Problem'
         "409":
-          description: Email already registered
+          description: user.email_taken
           schema:
-            $ref: '#/definitions/medusa.ErrorResponse'
+            $ref: '#/definitions/httperr.Problem'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/medusa.ErrorResponse'
+            $ref: '#/definitions/httperr.Problem'
       summary: Register user
       tags:
       - auth
@@ -191,16 +184,20 @@ paths:
             - $ref: '#/definitions/medusa.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_imlargo_medusa_app_internal_models.User'
+                  $ref: '#/definitions/github_com_imlargo_medusa_app_internal_user.User'
               type: object
         "401":
-          description: Unauthorized
+          description: auth.invalid_token
           schema:
-            $ref: '#/definitions/medusa.ErrorResponse'
+            $ref: '#/definitions/httperr.Problem'
+        "404":
+          description: user.not_found
+          schema:
+            $ref: '#/definitions/httperr.Problem'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/medusa.ErrorResponse'
+            $ref: '#/definitions/httperr.Problem'
       security:
       - BearerAuth: []
       summary: Get user info

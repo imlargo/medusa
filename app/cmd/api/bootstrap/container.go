@@ -21,10 +21,10 @@ import (
 	"github.com/imlargo/medusa/postgres"
 	"github.com/imlargo/medusa/storage"
 
+	"github.com/imlargo/medusa/app/internal/account"
 	"github.com/imlargo/medusa/app/internal/config"
 	"github.com/imlargo/medusa/app/internal/database"
-	"github.com/imlargo/medusa/app/internal/handlers"
-	"github.com/imlargo/medusa/app/internal/services"
+	"github.com/imlargo/medusa/app/internal/events"
 	"github.com/imlargo/medusa/app/internal/store"
 )
 
@@ -79,17 +79,16 @@ type Container struct {
 	closers []func() error
 }
 
-// Services holds the application services.
+// Services holds the application services, one per feature that has one.
 type Services struct {
-	User services.UserService
-	Auth services.AuthService
+	Account *account.Service
 }
 
-// Handlers holds the HTTP handlers.
+// Handlers holds the HTTP handlers, one per feature.
 type Handlers struct {
-	Health *health.Handler
-	Auth   *handlers.AuthHandler
-	Events *handlers.EventsHandler
+	Health  *health.Handler
+	Account *account.Handler
+	Events  *events.Handler
 }
 
 // Options selects which optional components to initialize. A component is only
@@ -309,23 +308,16 @@ func (c *Container) buildHealthService() *health.Service {
 }
 
 func (c *Container) buildServices() *Services {
-	base := services.NewService(c.Store, c.Config)
-
-	// AuthService reads user records through UserService during login and
-	// registration, so UserService has to exist first.
-	userService := services.NewUserService(base)
-
 	return &Services{
-		User: userService,
-		Auth: services.NewAuthService(base, userService, c.JWT),
+		Account: account.NewService(c.Store.Users, c.JWT, c.Config.Auth.TokenExpiration, c.Config.Auth.RefreshExpiration),
 	}
 }
 
 func (c *Container) buildHandlers() *Handlers {
 	return &Handlers{
-		Health: health.NewHandler(c.HealthService),
-		Auth:   handlers.NewAuthHandler(c.Services.Auth),
-		Events: handlers.NewEventsHandler(c.Events, c.EventsLifecycle, c.JWT),
+		Health:  health.NewHandler(c.HealthService),
+		Account: account.NewHandler(c.Services.Account),
+		Events:  events.NewHandler(c.Events, c.EventsLifecycle, c.JWT),
 	}
 }
 
