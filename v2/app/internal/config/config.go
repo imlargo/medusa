@@ -10,6 +10,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/netip"
 	"os"
 	"slices"
@@ -17,9 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imlargo/medusa/pkg/medusa/core/app"
-	"github.com/imlargo/medusa/pkg/medusa/core/env"
-	"github.com/imlargo/medusa/pkg/medusa/services/storage"
+	"github.com/imlargo/medusa/storage"
+	"github.com/joho/godotenv"
 )
 
 // Environment identifies the deployment the process is running in.
@@ -50,7 +50,9 @@ func (e Environment) IsValid() bool {
 
 // Config is the fully resolved application configuration.
 type Config struct {
-	app.Config
+	Server   ServerConfig
+	Database DatabaseConfig
+	Auth     AuthConfig
 
 	Environment Environment
 	Runtime     RuntimeConfig
@@ -58,6 +60,25 @@ type Config struct {
 	RateLimiter RateLimiterConfig
 	Redis       RedisConfig
 	Storage     StorageConfig
+}
+
+// ServerConfig is where the HTTP server listens.
+type ServerConfig struct {
+	Host string
+	Port int
+}
+
+// DatabaseConfig points at the Postgres database.
+type DatabaseConfig struct {
+	URL string
+}
+
+// AuthConfig signs and times the access and refresh tokens.
+type AuthConfig struct {
+	JwtSecret         string
+	JwtIssuer         string
+	TokenExpiration   time.Duration
+	RefreshExpiration time.Duration
 }
 
 // CORSConfig lists the origins allowed to call the API from a browser. The
@@ -127,8 +148,8 @@ type RateLimiterConfig struct {
 	TrustedProxies []string
 }
 
-// RedisConfig points at the Redis instance backing the cache. Redis is optional:
-// an empty URL disables it.
+// RedisConfig points at the Redis instance. Redis is optional: an empty URL
+// disables it.
 type RedisConfig struct {
 	URL string
 }
@@ -151,27 +172,27 @@ func (c StorageConfig) Enabled() bool { return c.BucketName != "" }
 // directory is loaded first when present; it never overrides variables already
 // exported in the environment.
 func Load() (*Config, error) {
-	env.LoadEnv()
+	if err := loadDotEnv(); err != nil {
+		return nil, err
+	}
 
 	var l loader
 
 	environment := Environment(strings.ToLower(l.text(envAppEnv, string(EnvDevelopment))))
 
 	cfg := &Config{
-		Config: app.Config{
-			Server: app.ServerConfig{
-				Host: l.text(envHost, defaultHost),
-				Port: l.integer(envPort, defaultPort),
-			},
-			Database: app.DbConfig{
-				URL: l.required(envDatabaseURL),
-			},
-			Auth: app.AuthConfig{
-				JwtSecret:         l.required(envJWTSecret),
-				JwtIssuer:         l.text(envJWTIssuer, defaultJWTIssuer),
-				TokenExpiration:   l.duration(envJWTTokenExpiration, defaultTokenExpiration),
-				RefreshExpiration: l.duration(envJWTRefreshExpiration, defaultRefreshExpiration),
-			},
+		Server: ServerConfig{
+			Host: l.text(envHost, defaultHost),
+			Port: l.integer(envPort, defaultPort),
+		},
+		Database: DatabaseConfig{
+			URL: l.required(envDatabaseURL),
+		},
+		Auth: AuthConfig{
+			JwtSecret:         l.required(envJWTSecret),
+			JwtIssuer:         l.text(envJWTIssuer, defaultJWTIssuer),
+			TokenExpiration:   l.duration(envJWTTokenExpiration, defaultTokenExpiration),
+			RefreshExpiration: l.duration(envJWTRefreshExpiration, defaultRefreshExpiration),
 		},
 		Environment: environment,
 		Runtime: RuntimeConfig{
@@ -324,6 +345,16 @@ func (c StorageConfig) validate() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// loadDotEnv loads a .env file from the working directory when there is one.
+// Variables already set in the environment win. A missing file is the normal
+// case in a container; a malformed one is an error.
+func loadDotEnv() error {
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("load .env: %w", err)
+	}
+	return nil
 }
 
 // loader reads typed values from the environment and collects the parse errors

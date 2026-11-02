@@ -1,21 +1,21 @@
 package bootstrap
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	medusactx "github.com/imlargo/medusa/pkg/medusa/context"
-	"github.com/imlargo/medusa/pkg/medusa/core/logger"
-	"go.uber.org/zap"
+
+	"github.com/imlargo/medusa"
 )
 
 // accessLogMiddleware logs one structured entry per request through the
-// application logger, replacing gin.Default()'s plain-text writer so access logs
-// end up in the same JSON stream as everything else.
+// application logger, replacing gin.Default()'s plain-text writer so access
+// logs end up in the same JSON stream as everything else.
 //
-// Server errors (5xx) are logged at error level, client errors (4xx) at warn and
-// everything else at info, which keeps log-based alerting straightforward.
-func accessLogMiddleware(log *logger.Logger) gin.HandlerFunc {
+// Server errors (5xx) are logged at error level, client errors (4xx) at warn
+// and everything else at info, which keeps log-based alerting straightforward.
+func accessLogMiddleware(log *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 
@@ -28,26 +28,27 @@ func accessLogMiddleware(log *logger.Logger) gin.HandlerFunc {
 			path = c.Request.URL.Path
 		}
 
-		fields := []zap.Field{
-			zap.String("method", c.Request.Method),
-			zap.String("path", path),
-			zap.Int("status", status),
-			zap.Duration("latency", time.Since(start)),
-			zap.String("ip", c.ClientIP()),
-			zap.String("request_id", c.GetString(medusactx.RequestIDContextKey)),
+		attrs := []slog.Attr{
+			slog.String("method", c.Request.Method),
+			slog.String("path", path),
+			slog.Int("status", status),
+			slog.Duration("latency", time.Since(start)),
+			slog.String("ip", c.ClientIP()),
+			slog.String("request_id", c.GetString(medusa.RequestIDKey)),
 		}
 
 		if err := c.Errors.ByType(gin.ErrorTypePrivate).String(); err != "" {
-			fields = append(fields, zap.String("error", err))
+			attrs = append(attrs, slog.String("error", err))
 		}
 
+		ctx := c.Request.Context()
 		switch {
 		case status >= 500:
-			log.Error("request failed", fields...)
+			log.LogAttrs(ctx, slog.LevelError, "request failed", attrs...)
 		case status >= 400:
-			log.Warn("request rejected", fields...)
+			log.LogAttrs(ctx, slog.LevelWarn, "request rejected", attrs...)
 		default:
-			log.Info("request completed", fields...)
+			log.LogAttrs(ctx, slog.LevelInfo, "request completed", attrs...)
 		}
 	}
 }

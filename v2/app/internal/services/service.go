@@ -1,25 +1,19 @@
+// Package services holds the application's business logic.
 package services
 
 import (
-	"github.com/imlargo/medusa/internal/config"
-	"github.com/imlargo/medusa/internal/store"
-	"github.com/imlargo/medusa/pkg/medusa/core/service"
+	"github.com/imlargo/medusa/app/internal/config"
+	"github.com/imlargo/medusa/app/internal/store"
 )
 
+// Service is what every service shares: the repositories and the
+// configuration.
 type Service struct {
-	*service.Service
 	store  *store.Store
 	config *config.Config
 }
 
-func NewService(
-	medusa *service.Service,
-	store *store.Store,
-	config *config.Config,
-) *Service {
-	return &Service{
-		medusa,
-		store,
-		config,
-	}
+// NewService bundles the shared dependencies.
+func NewService(store *store.Store, config *config.Config) *Service {
+	return &Service{store: store, config: config}
 }

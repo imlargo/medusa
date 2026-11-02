@@ -1,12 +1,17 @@
-// Command migrate applies the database schema migrations and exits.
+// Command migrate applies the pending database migrations and exits. Run it
+// as its own deploy step, before the new API version starts.
 package main
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/imlargo/medusa/internal/config"
-	"github.com/imlargo/medusa/internal/database"
+	"github.com/imlargo/medusa/app/internal/config"
+	"github.com/imlargo/medusa/app/internal/database"
 )
 
 func main() {
@@ -16,32 +21,18 @@ func main() {
 	}
 }
 
-func run() (err error) {
+func run() error {
+	// A deploy that is canceled mid-migration stops between statements
+	// instead of being killed inside one.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	db, err := database.NewPostgresDatabase(cfg.Database.URL)
-	if err != nil {
-		return fmt.Errorf("connect to database: %w", err)
-	}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 
-	defer func() {
-		sqlDB, dbErr := db.DB()
-		if dbErr != nil {
-			return
-		}
-		if closeErr := sqlDB.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close database: %w", closeErr)
-		}
-	}()
-
-	if err := database.Migrate(db); err != nil {
-		return fmt.Errorf("run migrations: %w", err)
-	}
-
-	fmt.Println("migrations applied successfully")
-
-	return nil
+	return database.Migrate(ctx, cfg.Database.URL, logger)
 }

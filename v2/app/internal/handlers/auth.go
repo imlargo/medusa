@@ -1,12 +1,13 @@
 package handlers
 
 import (
-	"github.com/imlargo/medusa/internal/dto"
-	"github.com/imlargo/medusa/internal/models"
-	"github.com/imlargo/medusa/internal/services"
-	"github.com/imlargo/medusa/pkg/medusa"
-	"github.com/imlargo/medusa/pkg/medusa/core/handler"
-	"github.com/imlargo/medusa/pkg/medusa/core/responses"
+	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/httperr"
+
+	"github.com/imlargo/medusa/app/internal/auth"
+	"github.com/imlargo/medusa/app/internal/dto"
+	"github.com/imlargo/medusa/app/internal/models"
+	"github.com/imlargo/medusa/app/internal/services"
 )
 
 // AuthHandler serves the authentication endpoints.
@@ -15,16 +16,12 @@ import (
 // selection and response rendering are handled by the medusa.Handle adapters the
 // routes wrap these in, so nothing here writes to the response.
 type AuthHandler struct {
-	*handler.Handler
-
 	authService services.AuthService
 }
 
-func NewAuthHandler(base *handler.Handler, authService services.AuthService) *AuthHandler {
-	return &AuthHandler{
-		Handler:     base,
-		authService: authService,
-	}
+// NewAuthHandler serves the authentication endpoints through authService.
+func NewAuthHandler(authService services.AuthService) *AuthHandler {
+	return &AuthHandler{authService: authService}
 }
 
 // LoginWithPassword exchanges credentials for a token pair.
@@ -36,10 +33,10 @@ func NewAuthHandler(base *handler.Handler, authService services.AuthService) *Au
 //	@Accept			json
 //	@Produce		json
 //	@Param			payload	body		dto.LoginWithPassword	true	"Credentials"
-//	@Success		200		{object}	responses.SuccessResponse{data=dto.AuthResponse}	"Logged in"
-//	@Failure		400		{object}	responses.ErrorResponse	"Bad Request"
-//	@Failure		401		{object}	responses.ErrorResponse	"Invalid credentials"
-//	@Failure		500		{object}	responses.ErrorResponse	"Internal Server Error"
+//	@Success		200		{object}	medusa.SuccessResponse{data=dto.AuthResponse}	"Logged in"
+//	@Failure		400		{object}	medusa.ErrorResponse	"Bad Request"
+//	@Failure		401		{object}	medusa.ErrorResponse	"Invalid credentials"
+//	@Failure		500		{object}	medusa.ErrorResponse	"Internal Server Error"
 func (a *AuthHandler) LoginWithPassword(ctx *medusa.Context, in *dto.LoginWithPassword) (*dto.AuthResponse, error) {
 	return a.authService.LoginWithPassword(ctx.Ctx(), in.Email, in.Password)
 }
@@ -53,10 +50,10 @@ func (a *AuthHandler) LoginWithPassword(ctx *medusa.Context, in *dto.LoginWithPa
 //	@Accept			json
 //	@Produce		json
 //	@Param			payload	body		dto.RegisterUser	true	"Registration payload"
-//	@Success		201		{object}	responses.SuccessResponse{data=dto.AuthResponse}	"Registered"
-//	@Failure		400		{object}	responses.ErrorResponse	"Bad Request"
-//	@Failure		409		{object}	responses.ErrorResponse	"Email already registered"
-//	@Failure		500		{object}	responses.ErrorResponse	"Internal Server Error"
+//	@Success		201		{object}	medusa.SuccessResponse{data=dto.AuthResponse}	"Registered"
+//	@Failure		400		{object}	medusa.ErrorResponse	"Bad Request"
+//	@Failure		409		{object}	medusa.ErrorResponse	"Email already registered"
+//	@Failure		500		{object}	medusa.ErrorResponse	"Internal Server Error"
 func (a *AuthHandler) Register(ctx *medusa.Context, in *dto.RegisterUser) (*dto.AuthResponse, error) {
 	return a.authService.RegisterWithPassword(ctx.Ctx(), in)
 }
@@ -68,15 +65,15 @@ func (a *AuthHandler) Register(ctx *medusa.Context, in *dto.RegisterUser) (*dto.
 //	@Description	Get the authenticated user's information
 //	@Tags			auth
 //	@Produce		json
-//	@Success		200	{object}	responses.SuccessResponse{data=models.User}	"The authenticated user"
-//	@Failure		401	{object}	responses.ErrorResponse	"Unauthorized"
-//	@Failure		500	{object}	responses.ErrorResponse	"Internal Server Error"
+//	@Success		200	{object}	medusa.SuccessResponse{data=models.User}	"The authenticated user"
+//	@Failure		401	{object}	medusa.ErrorResponse	"Unauthorized"
+//	@Failure		500	{object}	medusa.ErrorResponse	"Internal Server Error"
 //	@Security		BearerAuth
 func (a *AuthHandler) GetUser(ctx *medusa.Context) (*models.User, error) {
-	userID, ok := ctx.UserID()
+	userID, ok := auth.UserID(ctx)
 	if !ok {
 		// Only reachable if the route is registered without the auth middleware.
-		return nil, responses.Unauthorized("authentication required")
+		return nil, httperr.Unauthorized("authentication required")
 	}
 
 	return a.authService.GetUser(ctx.Ctx(), userID)

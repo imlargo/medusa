@@ -1,12 +1,17 @@
 package bootstrap
 
 import (
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
-	apidocs "github.com/imlargo/medusa/api/docs"
-	"github.com/imlargo/medusa/pkg/medusa"
-	medusadocs "github.com/imlargo/medusa/pkg/medusa/core/docs"
-	"github.com/imlargo/medusa/pkg/medusa/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/middleware"
+
+	apidocs "github.com/imlargo/medusa/app/api/docs"
+	"github.com/imlargo/medusa/app/internal/auth"
+	"github.com/imlargo/medusa/app/internal/hosturl"
 )
 
 // apiGroups are the two authorization scopes every feature registers routes
@@ -39,7 +44,7 @@ func newRouter(c *Container) *gin.Engine {
 		// Unreachable: the CIDR blocks are validated when the configuration is
 		// loaded. Log rather than ignore, so a future change cannot make this
 		// silent.
-		c.Logger.Sugar().Errorw("invalid trusted proxy configuration", "error", err)
+		c.Logger.Error("invalid trusted proxy configuration", slog.Any("error", err))
 	}
 
 	router.Use(gin.Recovery(), accessLogMiddleware(c.Logger))
@@ -66,13 +71,13 @@ func ginMode(c *Container) string {
 // end-to-end latency of a request.
 func registerRoutes(router *gin.Engine, c *Container) {
 	router.Use(
-		middleware.CreateRequestIDMiddleware(),
-		middleware.NewCorsMiddleware(c.Config.Server.Host, c.Config.CORS.AllowedOrigins),
-		middleware.NewBodyLimitMiddleware(c.Config.Runtime.MaxRequestBody),
+		middleware.RequestID(),
+		middleware.CORS(allowedOrigins(c)),
+		middleware.BodyLimit(c.Config.Runtime.MaxRequestBody),
 	)
 
 	if c.Metrics != nil {
-		router.Use(middleware.NewMetricsMiddleware(c.Metrics))
+		router.Use(middleware.Metrics(c.Metrics))
 
 		// Scraped from this container's own registry, not the global default.
 		// It exposes internal request paths and latencies, so restrict it at the
@@ -83,18 +88,12 @@ func registerRoutes(router *gin.Engine, c *Container) {
 	// Off by default in production: publishing the whole API surface, including
 	// endpoints not yet meant to be public, should be a decision.
 	if c.Config.Runtime.DocsEnabled {
-		// The spec is injected rather than imported by the docs package, which is
-		// what keeps pkg/medusa independent of this application.
-		medusadocs.RegisterDocs(router, medusadocs.Config{
-			Spec: apidocs.SwaggerInfo,
-			Host: c.Config.Server.Host,
-			Port: c.Config.Server.Port,
-		})
+		registerDocs(router, apidocs.SwaggerInfo, c.Config.Server.Host, c.Config.Server.Port)
 	}
 
 	// Probes sit outside the API group on purpose: no auth and no rate limit, so
 	// orchestrators keep getting an answer even while the app sheds load.
-	router.GET("/health", c.Handlers.Health.Health)
+	router.GET("/health", c.Handlers.Health.Live)
 	router.GET("/ready", c.Handlers.Health.Ready)
 
 	v1 := router.Group("/v1")
@@ -102,16 +101,24 @@ func registerRoutes(router *gin.Engine, c *Container) {
 	// Rate limiting covers public endpoints too: unauthenticated login and
 	// register calls are precisely what needs throttling.
 	if c.RateLimiter != nil {
-		v1.Use(middleware.NewRateLimiterMiddleware(c.RateLimiter))
+		v1.Use(middleware.RateLimit(c.RateLimiter))
 	}
 
 	groups := apiGroups{
 		public:    v1.Group(""),
-		protected: v1.Group("", middleware.NewJWTAuthMiddleware(c.JWT)),
+		protected: v1.Group("", auth.Middleware(c.JWT)),
 	}
 
 	registerAuthRoutes(groups, c)
 	registerEventRoutes(groups, c)
+}
+
+// allowedOrigins is the configured CORS origins plus the server's own URL,
+// which is always allowed.
+func allowedOrigins(c *Container) []string {
+	origins := make([]string, 0, len(c.Config.CORS.AllowedOrigins)+1)
+	origins = append(origins, c.Config.CORS.AllowedOrigins...)
+	return append(origins, hosturl.Complete(c.Config.Server.Host))
 }
 
 func registerAuthRoutes(g apiGroups, c *Container) {

@@ -1,6 +1,6 @@
-// Package jwt provides JSON Web Token (JWT) generation and validation functionality.
-// It uses HS256 signing method and supports custom claims with user identification.
-package jwt
+// Package auth issues and validates the API's access tokens and carries the
+// authenticated user through a request.
+package auth
 
 import (
 	"errors"
@@ -11,72 +11,68 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// JWT handles JWT token generation and parsing operations.
+// Claims are the token claims: the registered set plus the user's ID.
+type Claims struct {
+	jwt.RegisteredClaims
+	UserID int64 `json:"user_id"`
+}
+
+// JWT signs and parses HS256 tokens with a shared secret.
 type JWT struct {
-	config Config
+	secret []byte
 }
 
-// NewJWT creates a JWT signer from cfg, returning an error when the
-// configuration is unusable.
-func NewJWT(cfg Config) (*JWT, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("jwt config: %w", err)
+// NewJWT returns a signer for secret, or an error when the secret is empty.
+func NewJWT(secret string) (*JWT, error) {
+	if secret == "" {
+		return nil, errors.New("jwt: secret can't be empty")
 	}
-
-	return &JWT{config: cfg}, nil
+	return &JWT{secret: []byte(secret)}, nil
 }
 
-// MustNewJWT is NewJWT for callers that cannot handle a failure, such as a
-// package-level variable. It panics on an invalid configuration, so prefer
-// NewJWT anywhere an error can be returned.
-func MustNewJWT(cfg Config) *JWT {
-	j, err := NewJWT(cfg)
+// MustNewJWT is NewJWT for tests and fixed configurations. It panics on an
+// empty secret.
+func MustNewJWT(secret string) *JWT {
+	j, err := NewJWT(secret)
 	if err != nil {
 		panic(err)
 	}
-
 	return j
 }
 
-// GenerateToken creates a new JWT token for the specified user ID with an expiration time.
-// The token is signed using HS256 algorithm with the configured secret.
-// Returns the signed token string or an error if signing fails.
-func (j *JWT) GenerateToken(userID uint, expiresAt time.Time) (string, error) {
+// GenerateToken signs a token for userID that expires at expiresAt.
+func (j *JWT) GenerateToken(userID int64, expiresAt time.Time) (string, error) {
+	now := time.Now()
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, CustomClaims{
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Audience:  []string{},
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
 		},
 	})
 
-	// Sign and get the complete encoded token as a string using the key
-	tokenString, err := token.SignedString([]byte(j.config.Secret))
+	signed, err := token.SignedString(j.secret)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("sign token: %w", err)
 	}
-	return tokenString, nil
+	return signed, nil
 }
 
-// ParseToken validates and parses a JWT token string.
-// It automatically strips "Bearer " prefix if present and validates the token signature,
-// expiration, and signing method. Returns the custom claims if valid, or an error otherwise.
-func (j *JWT) ParseToken(tokenString string) (*CustomClaims, error) {
-	tokenString = strings.TrimPrefix(tokenString, "Bearer ")
-	tokenString = strings.TrimSpace(tokenString)
-	if tokenString == "" {
+// ParseToken validates the signature, the signing method and the expiry of
+// token and returns its claims. A leading "Bearer " is ignored.
+func (j *JWT) ParseToken(token string) (*Claims, error) {
+	token = strings.TrimSpace(strings.TrimPrefix(token, "Bearer "))
+	if token == "" {
 		return nil, errors.New("token is empty")
 	}
 
-	token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method %v", token.Header["alg"])
+	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method %v", t.Header["alg"])
 		}
-
-		return []byte(j.config.Secret), nil
+		return j.secret, nil
 	},
 		jwt.WithExpirationRequired(),
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
@@ -85,10 +81,8 @@ func (j *JWT) ParseToken(tokenString string) (*CustomClaims, error) {
 		return nil, err
 	}
 
-	claims, ok := token.Claims.(*CustomClaims)
-	if !ok || !token.Valid {
-		// The previous code returned the (nil) parse error here, which surfaced
-		// as a nil claims pointer and a nil error.
+	claims, ok := parsed.Claims.(*Claims)
+	if !ok || !parsed.Valid {
 		return nil, errors.New("token claims are not valid")
 	}
 

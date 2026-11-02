@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imlargo/medusa/internal/config"
 	"github.com/imlargo/ratelimit"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/imlargo/medusa/app/internal/config"
 )
 
 func rateLimiterConfig() config.RateLimiterConfig {

@@ -12,9 +12,16 @@ FROM --platform=${BUILDPLATFORM} golang:${GO_VERSION} AS build
 
 WORKDIR /src
 
+# The build context is the repository root, because the app compiles against
+# the Medusa module one directory up:
+#
+#   docker build -f app/Dockerfile .
+#
 # Dependencies first: this layer is reused by every build that does not touch
-# go.mod or go.sum.
+# a go.mod or go.sum.
 COPY go.mod go.sum ./
+COPY app/go.mod app/go.sum ./app/
+WORKDIR /src/app
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
@@ -23,7 +30,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # (or exclude it in .dockerignore) and the layer digest never changes, so the
 # build is cached and the binary silently freezes. The expensive step here is
 # `go build`, and the cache mount below already makes that incremental.
+WORKDIR /src
 COPY . .
+WORKDIR /src/app
 
 # CGO stays off so the result is a static binary: every driver in this module is
 # pure Go (pgx for Postgres, go-redis, the AWS SDK), so nothing needs libc.

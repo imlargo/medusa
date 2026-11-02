@@ -1,18 +1,23 @@
+// Package store groups the repositories the services use.
 package store
 
 import (
-	"github.com/imlargo/medusa/internal/repositories"
-	medusarepo "github.com/imlargo/medusa/pkg/medusa/core/repository"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/imlargo/medusa/app/internal/database/sqlc"
+	"github.com/imlargo/medusa/app/internal/repositories"
 )
 
+// Store holds one repository per aggregate.
 type Store struct {
-	*medusarepo.Store
 	Users repositories.UserRepository
 }
 
-func NewStore(store *medusarepo.Store) *Store {
+// New builds the repositories over pool.
+func New(pool *pgxpool.Pool) *Store {
+	queries := sqlc.New(pool)
+
 	return &Store{
-		Store: store,
-		Users: repositories.NewUserRepository(store.BaseRepo),
+		Users: repositories.NewUserRepository(queries),
 	}
 }

@@ -6,27 +6,29 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imlargo/medusa/internal/dto"
-	"github.com/imlargo/medusa/internal/models"
-	"github.com/imlargo/medusa/pkg/medusa/core/jwt"
-	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
+
+	"github.com/imlargo/medusa/httperr"
+
+	"github.com/imlargo/medusa/app/internal/auth"
+	"github.com/imlargo/medusa/app/internal/dto"
+	"github.com/imlargo/medusa/app/internal/models"
+	"github.com/imlargo/medusa/app/internal/repositories"
 )
 
 type AuthService interface {
-	GetUser(ctx context.Context, userID uint) (*models.User, error)
+	GetUser(ctx context.Context, userID int64) (*models.User, error)
 	LoginWithPassword(ctx context.Context, email, password string) (*dto.AuthResponse, error)
 	RegisterWithPassword(ctx context.Context, user *dto.RegisterUser) (*dto.AuthResponse, error)
 }
 
 type authService struct {
 	*Service
-	jwtAuth     *jwt.JWT
+	jwtAuth     *auth.JWT
 	userService UserService
 }
 
-func NewAuthService(container *Service, userSrv UserService, jwtAuth *jwt.JWT) AuthService {
+func NewAuthService(container *Service, userSrv UserService, jwtAuth *auth.JWT) AuthService {
 	return &authService{
 		Service:     container,
 		userService: userSrv,
@@ -34,13 +36,13 @@ func NewAuthService(container *Service, userSrv UserService, jwtAuth *jwt.JWT) A
 	}
 }
 
-func (s *authService) GetUser(ctx context.Context, userID uint) (*models.User, error) {
+func (s *authService) GetUser(ctx context.Context, userID int64) (*models.User, error) {
 	user, err := s.store.Users.Get(ctx, userID)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, responses.NotFound("user")
+	if errors.Is(err, repositories.ErrNotFound) {
+		return nil, httperr.NotFound("user")
 	}
 	if err != nil {
-		return nil, responses.Internal(err)
+		return nil, httperr.Internal(err)
 	}
 
 	return user, nil
@@ -48,8 +50,8 @@ func (s *authService) GetUser(ctx context.Context, userID uint) (*models.User, e
 
 func (s *authService) LoginWithPassword(ctx context.Context, email, password string) (*dto.AuthResponse, error) {
 	user, err := s.store.Users.GetByEmail(ctx, strings.ToLower(email))
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, responses.Internal(err)
+	if err != nil && !errors.Is(err, repositories.ErrNotFound) {
+		return nil, httperr.Internal(err)
 	}
 
 	// A missing user and a wrong password return the same error on purpose: a
@@ -66,12 +68,12 @@ func (s *authService) LoginWithPassword(ctx context.Context, email, password str
 	refreshExpiration := time.Now().Add(s.config.Auth.RefreshExpiration)
 	accessToken, err := s.jwtAuth.GenerateToken(user.ID, accessExpiration)
 	if err != nil {
-		return nil, responses.InternalWithMessage("could not issue the access token", err)
+		return nil, httperr.InternalWithMessage("could not issue the access token", err)
 	}
 
 	refreshToken, err := s.jwtAuth.GenerateToken(user.ID, refreshExpiration)
 	if err != nil {
-		return nil, responses.InternalWithMessage("could not issue the refresh token", err)
+		return nil, httperr.InternalWithMessage("could not issue the refresh token", err)
 	}
 
 	authResponse := &dto.AuthResponse{
@@ -96,12 +98,12 @@ func (s *authService) RegisterWithPassword(ctx context.Context, user *dto.Regist
 	refreshExpiration := time.Now().Add(s.config.Auth.RefreshExpiration)
 	accessToken, err := s.jwtAuth.GenerateToken(createdUser.ID, accessExpiration)
 	if err != nil {
-		return nil, responses.InternalWithMessage("could not issue the access token", err)
+		return nil, httperr.InternalWithMessage("could not issue the access token", err)
 	}
 
 	refreshToken, err := s.jwtAuth.GenerateToken(createdUser.ID, refreshExpiration)
 	if err != nil {
-		return nil, responses.InternalWithMessage("could not issue the refresh token", err)
+		return nil, httperr.InternalWithMessage("could not issue the refresh token", err)
 	}
 
 	authResponse := &dto.AuthResponse{
@@ -118,5 +120,5 @@ func (s *authService) RegisterWithPassword(ctx context.Context, user *dto.Regist
 // errInvalidCredentials is the single response for any failed password login,
 // so callers cannot tell a wrong password from an unknown account.
 func errInvalidCredentials() error {
-	return responses.Unauthorized("invalid email or password")
+	return httperr.Unauthorized("invalid email or password")
 }

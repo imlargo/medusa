@@ -4,28 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"time"
 
-	"github.com/imlargo/medusa/internal/config"
-	"github.com/imlargo/medusa/internal/database"
-	"github.com/imlargo/medusa/internal/handlers"
-	"github.com/imlargo/medusa/internal/services"
-	"github.com/imlargo/medusa/internal/store"
-	"github.com/imlargo/medusa/pkg/medusa/core/handler"
-	"github.com/imlargo/medusa/pkg/medusa/core/jwt"
-	"github.com/imlargo/medusa/pkg/medusa/core/logger"
-	"github.com/imlargo/medusa/pkg/medusa/core/metrics"
-	"github.com/imlargo/medusa/pkg/medusa/core/repository"
-	"github.com/imlargo/medusa/pkg/medusa/core/service"
-	"github.com/imlargo/medusa/pkg/medusa/services/cache"
-	"github.com/imlargo/medusa/pkg/medusa/services/health"
-	"github.com/imlargo/medusa/pkg/medusa/services/storage"
 	"github.com/imlargo/ratelimit"
 	ratelimitprom "github.com/imlargo/ratelimit/metrics/prometheus"
 	"github.com/imlargo/sse"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
-	"gorm.io/gorm"
+
+	"github.com/imlargo/medusa/health"
+	"github.com/imlargo/medusa/metrics"
+	"github.com/imlargo/medusa/storage"
+
+	"github.com/imlargo/medusa/app/internal/auth"
+	"github.com/imlargo/medusa/app/internal/config"
+	"github.com/imlargo/medusa/app/internal/database"
+	"github.com/imlargo/medusa/app/internal/handlers"
+	"github.com/imlargo/medusa/app/internal/services"
+	"github.com/imlargo/medusa/app/internal/store"
 )
 
 const (
@@ -41,23 +40,21 @@ const (
 // Container holds every dependency of the application.
 //
 // Optional components are nil when the matching Options flag is off or the
-// configuration for them is absent; always check before use, or go through the
-// Has* helpers.
+// configuration for them is absent; always check before use.
 type Container struct {
 	Config *config.Config
-	Logger *logger.Logger
+	Logger *slog.Logger
 
 	// Infrastructure, always present.
-	DB    *gorm.DB
+	DB    *pgxpool.Pool
 	Store *store.Store
-	JWT   *jwt.JWT
+	JWT   *auth.JWT
 
 	// Infrastructure, optional.
-	RedisClient *redis.Client          // nil unless Redis is configured
-	Cache       cache.Cache            // nil unless Redis is configured
-	Storage     storage.FileStorage    // nil unless object storage is configured
-	Metrics     metrics.MetricsService // nil unless metrics are enabled
-	RateLimiter *ratelimit.Limiter     // nil unless rate limiting is enabled
+	RedisClient *redis.Client       // nil unless Redis is configured
+	Storage     storage.FileStorage // nil unless object storage is configured
+	Metrics     *metrics.HTTP       // nil unless metrics are enabled
+	RateLimiter *ratelimit.Limiter  // nil unless rate limiting is enabled
 
 	// Events publishes server-sent events. Always present: it is in-memory and
 	// costs nothing until something subscribes.
@@ -85,21 +82,17 @@ type Container struct {
 type Services struct {
 	User services.UserService
 	Auth services.AuthService
-	// Add more as needed:
-	// Product services.ProductService
 }
 
 // Handlers holds the HTTP handlers.
 type Handlers struct {
-	Health *handler.HealthHandler
+	Health *health.Handler
 	Auth   *handlers.AuthHandler
 	Events *handlers.EventsHandler
-	// Add more as needed:
-	// Product *handlers.ProductHandler
 }
 
 // Options selects which optional components to initialize. A component is only
-// built when its flag is on *and* the corresponding configuration is present.
+// built when its flag is on and the corresponding configuration is present.
 type Options struct {
 	WithRedis   bool
 	WithStorage bool
@@ -120,28 +113,26 @@ func MinimalOptions() Options {
 	return Options{}
 }
 
-// NewContainer wires all dependencies. On failure it closes whatever was already
-// opened, so the caller never has to clean up after an error.
+// newLogger is the process logger: JSON on stderr, info and above.
+func newLogger() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stderr, nil))
+}
+
+// NewContainer wires all dependencies. On failure it closes whatever was
+// already opened, so the caller never has to clean up after an error.
 //
 // ctx bounds the connectivity checks performed while dialing dependencies.
 func NewContainer(ctx context.Context, cfg *config.Config, opts Options) (*Container, error) {
 	c := &Container{
 		Config: cfg,
-		Logger: logger.NewLogger(),
+		Logger: newLogger(),
 	}
-	c.onClose(func() error {
-		// Registered first so it runs last: every other closer may still log.
-		// Sync fails whenever stderr is not a syncable file, which is the norm on
-		// macOS and in containers, so the error carries no signal worth surfacing.
-		_ = c.Logger.Sync()
-		return nil
-	})
 
 	if err := c.initInfrastructure(ctx, opts); err != nil {
-		// Best effort: the caller only gets the initialization error, so surface
-		// any cleanup failure through the logger instead of swallowing it.
+		// The caller only gets the initialization error, so surface any
+		// cleanup failure through the logger instead of swallowing it.
 		if closeErr := c.Close(); closeErr != nil {
-			c.Logger.Sugar().Errorw("failed to release partially initialized resources", "error", closeErr)
+			c.Logger.Error("failed to release partially initialized resources", slog.Any("error", closeErr))
 		}
 		return nil, err
 	}
@@ -156,11 +147,9 @@ func NewContainer(ctx context.Context, cfg *config.Config, opts Options) (*Conta
 // initInfrastructure opens the external resources the app depends on.
 func (c *Container) initInfrastructure(ctx context.Context, opts Options) error {
 	cfg := c.Config
-	log := c.Logger.Sugar()
 
-	db, err := database.NewPostgresDatabase(cfg.Database.URL,
-		// Statement logging only outside production: it writes user data to a
-		// stream nothing can parse.
+	db, err := database.NewPostgres(ctx, cfg.Database.URL, c.Logger,
+		// Statement logging only outside production: it writes user data.
 		database.WithQueryLogging(!cfg.Environment.IsProduction()),
 	)
 	if err != nil {
@@ -168,16 +157,13 @@ func (c *Container) initInfrastructure(ctx context.Context, opts Options) error 
 	}
 	c.DB = db
 	c.onClose(func() error {
-		sqlDB, err := db.DB()
-		if err != nil {
-			return fmt.Errorf("get sql database handle: %w", err)
-		}
-		return sqlDB.Close()
+		db.Close()
+		return nil
 	})
 
-	c.Store = store.NewStore(repository.NewStore(db, c.Logger))
+	c.Store = store.New(db)
 
-	jwtAuth, err := jwt.NewJWT(jwt.Config{Secret: cfg.Auth.JwtSecret})
+	jwtAuth, err := auth.NewJWT(cfg.Auth.JwtSecret)
 	if err != nil {
 		return fmt.Errorf("initialize jwt: %w", err)
 	}
@@ -192,9 +178,8 @@ func (c *Container) initInfrastructure(ctx context.Context, opts Options) error 
 			return fmt.Errorf("connect to redis: %w", err)
 		}
 		c.RedisClient = redisClient
-		c.Cache = cache.NewRedisCache(redisClient)
 		c.onClose(redisClient.Close)
-		log.Infow("redis initialized")
+		c.Logger.Info("redis initialized")
 	}
 
 	if opts.WithStorage && cfg.Storage.Enabled() {
@@ -203,19 +188,22 @@ func (c *Container) initInfrastructure(ctx context.Context, opts Options) error 
 			return fmt.Errorf("initialize storage: %w", err)
 		}
 		c.Storage = fileStorage
-		log.Infow("storage initialized", "provider", cfg.Storage.Provider, "bucket", cfg.Storage.BucketName)
+		c.Logger.Info("storage initialized",
+			slog.String("provider", string(cfg.Storage.Provider)),
+			slog.String("bucket", cfg.Storage.BucketName),
+		)
 	}
 
 	if opts.WithMetrics {
 		// A dedicated registry rather than the global default: two containers in
 		// one process (which is every test that builds one) would otherwise
-		// panic on duplicate collector registration.
+		// fail on duplicate collector registration.
 		registry := prometheus.NewRegistry()
-		metricsService, err := metrics.NewPrometheusMetrics(registry)
+		httpMetrics, err := metrics.NewHTTP(registry)
 		if err != nil {
 			return fmt.Errorf("initialize metrics: %w", err)
 		}
-		c.Metrics = metricsService
+		c.Metrics = httpMetrics
 		c.MetricsRegistry = registry
 	}
 
@@ -226,12 +214,12 @@ func (c *Container) initInfrastructure(ctx context.Context, opts Options) error 
 		}
 		c.RateLimiter = rateLimiter
 		c.onClose(rateLimiter.Close)
-		log.Infow("rate limiter enabled",
-			"requests", cfg.RateLimiter.RequestsPerTimeFrame,
-			"per", cfg.RateLimiter.TimeFrame,
-			"auth_requests_per_minute", cfg.RateLimiter.AuthRequestsPerMinute,
-			"keyed_by", rateLimiterKeyDescription(cfg.RateLimiter),
-			"rules", rateLimiter.Rules(),
+		c.Logger.Info("rate limiter enabled",
+			slog.Int("requests", cfg.RateLimiter.RequestsPerTimeFrame),
+			slog.Duration("per", cfg.RateLimiter.TimeFrame),
+			slog.Int("auth_requests_per_minute", cfg.RateLimiter.AuthRequestsPerMinute),
+			slog.String("keyed_by", rateLimiterKeyDescription(cfg.RateLimiter)),
+			slog.Any("rules", rateLimiter.Rules()),
 		)
 	}
 
@@ -307,18 +295,20 @@ func rateLimiterKeyDescription(cfg config.RateLimiterConfig) string {
 // initialization and handles errors per request, so a periodic check would only
 // add latency to the readiness probe.
 func (c *Container) buildHealthService() *health.Service {
-	svc := health.NewService(healthCheckTimeout)
-	svc.RegisterChecker(health.NewDatabaseChecker(c.DB))
+	svc := health.New(healthCheckTimeout)
+	svc.Register("database", c.DB.Ping)
 
 	if c.RedisClient != nil {
-		svc.RegisterChecker(health.NewRedisChecker(c.RedisClient))
+		svc.Register("redis", func(ctx context.Context) error {
+			return c.RedisClient.Ping(ctx).Err()
+		})
 	}
 
 	return svc
 }
 
 func (c *Container) buildServices() *Services {
-	base := services.NewService(service.NewService(c.Logger), c.Store, c.Config)
+	base := services.NewService(c.Store, c.Config)
 
 	// AuthService reads user records through UserService during login and
 	// registration, so UserService has to exist first.
@@ -331,12 +321,10 @@ func (c *Container) buildServices() *Services {
 }
 
 func (c *Container) buildHandlers() *Handlers {
-	base := handler.NewHandler(c.Logger)
-
 	return &Handlers{
-		Health: handler.NewHealthHandler(base, c.HealthService),
-		Auth:   handlers.NewAuthHandler(base, c.Services.Auth),
-		Events: handlers.NewEventsHandler(base, c.Events, c.EventsLifecycle, c.JWT),
+		Health: health.NewHandler(c.HealthService),
+		Auth:   handlers.NewAuthHandler(c.Services.Auth),
+		Events: handlers.NewEventsHandler(c.Events, c.EventsLifecycle, c.JWT),
 	}
 }
 
@@ -358,7 +346,7 @@ func (c *Container) DrainEventStreams(ctx context.Context) error {
 	}
 
 	timeout := c.Config.Runtime.DrainTimeout()
-	c.Logger.Sugar().Infow("draining event streams", "open", open, "timeout", timeout)
+	c.Logger.Info("draining event streams", slog.Int("open", open), slog.Duration("timeout", timeout))
 
 	drainCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -387,9 +375,6 @@ func (c *Container) Close() error {
 
 	return errors.Join(errs...)
 }
-
-// HasCache reports whether a cache is available.
-func (c *Container) HasCache() bool { return c.Cache != nil }
 
 // HasStorage reports whether object storage is available.
 func (c *Container) HasStorage() bool { return c.Storage != nil }

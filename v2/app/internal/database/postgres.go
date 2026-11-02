@@ -1,31 +1,22 @@
+// Package database opens the connections the application depends on and
+// applies the schema migrations.
 package database
 
 import (
+	"context"
 	"fmt"
-	"log"
-	"os"
+	"log/slog"
 	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Connection pool defaults.
-//
-// The previous version passed an empty gorm.Config, which left Go's defaults in
-// place: unlimited open connections and two idle ones. Unlimited is the harmful
-// half — under load the pool opens as many connections as there are concurrent
-// queries and hits Postgres' max_connections, where new connections are refused
-// outright rather than queued.
 const (
-	// DefaultMaxOpenConns caps concurrent connections. Keep the total across all
+	// DefaultMaxConns caps concurrent connections. Keep the total across all
 	// replicas below the server's max_connections.
-	DefaultMaxOpenConns = 25
-
-	// DefaultMaxIdleConns keeps connections warm to avoid paying the handshake
-	// on every request. Never above DefaultMaxOpenConns.
-	DefaultMaxIdleConns = 10
+	DefaultMaxConns = 25
 
 	// DefaultConnMaxLifetime recycles connections so a load balancer or a
 	// failover never leaves the pool holding a dead one indefinitely.
@@ -34,103 +25,93 @@ const (
 	// DefaultConnMaxIdleTime closes connections nobody is using.
 	DefaultConnMaxIdleTime = 10 * time.Minute
 
-	// slowQueryThreshold is when gorm starts reporting a statement as slow.
+	// slowQueryThreshold is when a statement is logged as slow.
 	slowQueryThreshold = 200 * time.Millisecond
 )
 
-// PostgresConfig tunes the connection and the pool behind it.
-//
-// Record-not-found is never logged as an error: the service layer classifies it
-// as a 404, so logging it would turn every miss into noise at error level.
-type PostgresConfig struct {
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime time.Duration
-	ConnMaxIdleTime time.Duration
+// PostgresOption configures the pool.
+type PostgresOption func(*postgresConfig)
 
-	// LogQueries turns on gorm's statement logging. Leave it off outside
-	// development: it writes every statement, with its parameters, to stdout in
-	// a format nothing downstream can parse, and those parameters are user data.
-	LogQueries bool
+type postgresConfig struct {
+	logQueries bool
 }
 
-// PostgresOption configures the connection.
-type PostgresOption func(*PostgresConfig)
-
-// WithMaxOpenConns caps concurrent connections.
-func WithMaxOpenConns(n int) PostgresOption {
-	return func(c *PostgresConfig) { c.MaxOpenConns = n }
-}
-
-// WithMaxIdleConns sets how many connections stay warm.
-func WithMaxIdleConns(n int) PostgresOption {
-	return func(c *PostgresConfig) { c.MaxIdleConns = n }
-}
-
-// WithConnMaxLifetime sets how long a connection may be reused.
-func WithConnMaxLifetime(d time.Duration) PostgresOption {
-	return func(c *PostgresConfig) { c.ConnMaxLifetime = d }
-}
-
-// WithConnMaxIdleTime sets how long an unused connection is kept.
-func WithConnMaxIdleTime(d time.Duration) PostgresOption {
-	return func(c *PostgresConfig) { c.ConnMaxIdleTime = d }
-}
-
-// WithQueryLogging enables gorm's statement logging. Development only.
+// WithQueryLogging logs every statement with its arguments. Development only:
+// the arguments are user data.
 func WithQueryLogging(enabled bool) PostgresOption {
-	return func(c *PostgresConfig) { c.LogQueries = enabled }
+	return func(c *postgresConfig) { c.logQueries = enabled }
 }
 
-// NewPostgresDatabase opens a connection pool and verifies it is usable.
-//
-// gorm.Open is lazy about some failures, so this pings the database before
-// returning: a bad URL or an unreachable host should fail at startup, not on the
-// first request that happens to need it.
-func NewPostgresDatabase(url string, opts ...PostgresOption) (*gorm.DB, error) {
-	cfg := PostgresConfig{
-		MaxOpenConns:    DefaultMaxOpenConns,
-		MaxIdleConns:    DefaultMaxIdleConns,
-		ConnMaxLifetime: DefaultConnMaxLifetime,
-		ConnMaxIdleTime: DefaultConnMaxIdleTime,
-	}
+// NewPostgres opens a connection pool and pings it, so a bad URL or an
+// unreachable host fails at startup rather than on the first request.
+func NewPostgres(ctx context.Context, url string, logger *slog.Logger, opts ...PostgresOption) (*pgxpool.Pool, error) {
+	var cfg postgresConfig
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
-	logLevel := gormlogger.Warn
-	if cfg.LogQueries {
-		logLevel = gormlogger.Info
-	}
-
-	// gormlogger.Default is colourful, and ANSI escapes in a production log
-	// stream are noise every aggregator has to strip. Colour follows the same
-	// switch as statement logging: on for a terminal, off for a log pipeline.
-	db, err := gorm.Open(postgres.Open(url), &gorm.Config{
-		Logger: gormlogger.New(log.New(os.Stderr, "", log.LstdFlags), gormlogger.Config{
-			SlowThreshold:             slowQueryThreshold,
-			LogLevel:                  logLevel,
-			Colorful:                  cfg.LogQueries,
-			IgnoreRecordNotFoundError: true,
-		}),
-	})
+	poolCfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
-		return nil, fmt.Errorf("open postgres connection: %w", err)
+		// The parse error can quote the URL, and the URL carries the password.
+		return nil, fmt.Errorf("parse postgres url: invalid connection string")
 	}
 
-	pool, err := db.DB()
+	poolCfg.MaxConns = DefaultMaxConns
+	poolCfg.MaxConnLifetime = DefaultConnMaxLifetime
+	poolCfg.MaxConnIdleTime = DefaultConnMaxIdleTime
+	poolCfg.ConnConfig.Tracer = &queryTracer{logger: logger, verbose: cfg.logQueries}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
-		return nil, fmt.Errorf("access the connection pool: %w", err)
+		return nil, fmt.Errorf("open postgres pool: %w", err)
 	}
 
-	pool.SetMaxOpenConns(cfg.MaxOpenConns)
-	pool.SetMaxIdleConns(min(cfg.MaxIdleConns, cfg.MaxOpenConns))
-	pool.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	pool.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
-
-	if err := pool.Ping(); err != nil {
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
-	return db, nil
+	return pool, nil
+}
+
+// queryTracer logs slow statements always, and every statement when verbose.
+type queryTracer struct {
+	logger  *slog.Logger
+	verbose bool
+}
+
+type queryStartKey struct{}
+
+type queryStart struct {
+	at   time.Time
+	sql  string
+	args []any
+}
+
+func (t *queryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	return context.WithValue(ctx, queryStartKey{}, queryStart{at: time.Now(), sql: data.SQL, args: data.Args})
+}
+
+func (t *queryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
+	start, ok := ctx.Value(queryStartKey{}).(queryStart)
+	if !ok {
+		return
+	}
+
+	elapsed := time.Since(start.at)
+
+	switch {
+	case t.verbose:
+		t.logger.InfoContext(ctx, "query",
+			slog.String("sql", start.sql),
+			slog.Any("args", start.args),
+			slog.Duration("duration", elapsed),
+		)
+	case elapsed >= slowQueryThreshold:
+		// Without the arguments: outside development they are user data.
+		t.logger.WarnContext(ctx, "slow query",
+			slog.String("sql", start.sql),
+			slog.Duration("duration", elapsed),
+		)
+	}
 }

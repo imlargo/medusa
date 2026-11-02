@@ -1,0 +1,12 @@
+// The Medusa module at the root and the application in app/ share this
+// workspace, so commands run from the root (go test ./..., go vet ./..., the
+// editor) see both modules against this checkout.
+//
+// Consumers never see this file: `go get` fetches modules from the proxy, not
+// from a checkout.
+go 1.27.0
+
+use (
+	.
+	./app
+)

@@ -9,16 +9,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/imlargo/medusa/internal/config"
-	"github.com/imlargo/medusa/pkg/medusa/core/app"
-	"github.com/imlargo/medusa/pkg/medusa/core/server/http"
-	"github.com/imlargo/medusa/pkg/medusa/tools"
+	"github.com/imlargo/medusa/httpserver"
+	"github.com/imlargo/medusa/lifecycle"
+
+	"github.com/imlargo/medusa/app/internal/config"
+	"github.com/imlargo/medusa/app/internal/hosturl"
 )
 
-// App is a Medusa application together with the container holding its
+// App is the application lifecycle together with the container holding its
 // dependencies. Close releases them once Run returns.
 type App struct {
-	*app.App
+	*lifecycle.App
 
 	Container *Container
 }
@@ -51,26 +52,26 @@ func NewWithOptions(ctx context.Context, name string, opts Options) (*App, error
 		return nil, fmt.Errorf("initialize %s: %w", name, err)
 	}
 
-	server := http.NewServer(
+	server := httpserver.New(
 		newRouter(container),
 		container.Logger,
-		http.WithServerHost(cfg.Server.Host),
-		http.WithServerPort(cfg.Server.Port),
+		httpserver.WithHost(cfg.Server.Host),
+		httpserver.WithPort(cfg.Server.Port),
 		// The remainder of the shutdown budget, after the stream drain below has
 		// taken its slice.
-		http.WithShutdownTimeout(cfg.Runtime.ServerShutdownTimeout()),
+		httpserver.WithShutdownTimeout(cfg.Runtime.ServerShutdownTimeout()),
 	)
 
 	printBanner(os.Stdout, name, cfg)
 
 	return &App{
-		App: app.NewApp(
-			app.WithName(name),
-			app.WithServer(server),
-			app.WithLogger(container.Logger),
+		App: lifecycle.New(
+			lifecycle.WithName(name),
+			lifecycle.WithServer(server),
+			lifecycle.WithLogger(container.Logger),
 			// Runs before the HTTP server stops, so open SSE streams end on
 			// their own instead of holding the shutdown open.
-			app.WithOnStop(container.DrainEventStreams),
+			lifecycle.WithOnStop(container.DrainEventStreams),
 		),
 		Container: container,
 	}, nil
@@ -91,13 +92,13 @@ func printBanner(w io.Writer, name string, cfg *config.Config) {
 
 	docs := "disabled"
 	if cfg.Runtime.DocsEnabled {
-		docs = tools.GetFullDocsUrl(cfg.Server.Host, cfg.Server.Port)
+		docs = hosturl.DocsURL(cfg.Server.Host, cfg.Server.Port)
 	}
 
 	fields := [][2]string{
 		{"App", name},
 		{"Env", string(cfg.Environment)},
-		{"Server", tools.GetFullAppUrl(cfg.Server.Host, cfg.Server.Port)},
+		{"Server", hosturl.AppURL(cfg.Server.Host, cfg.Server.Port)},
 		{"Docs", docs},
 	}
 

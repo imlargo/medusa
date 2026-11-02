@@ -1,44 +1,26 @@
-// pkg/medusa/context_auth.go
-package context
+package auth
 
-// UserID returns the authenticated user's ID.
-func (c *Context) UserID() (uint, bool) {
-	id, exists := c.Get(UserIDContextKey)
-	if !exists {
-		return 0, false
-	}
-	switch v := id.(type) {
-	case uint:
-		return v, true
-	case int:
-		return uint(v), true
-	case int64:
-		return uint(v), true
-	case float64:
-		return uint(v), true
-	default:
-		return 0, false
-	}
-}
+import (
+	"github.com/gin-gonic/gin"
 
-// MustUserID returns the user ID or panics if not authenticated.
-// WARNING: This will be caught by recovery middleware and result in a 500 error.
-// Use UserID() and handle the bool return for proper 401 Unauthorized responses.
-func (c *Context) MustUserID() uint {
-	id, ok := c.UserID()
+	"github.com/imlargo/medusa"
+)
+
+// userIDKey holds the authenticated user's ID in the Gin context.
+const userIDKey = "auth_user_id"
+
+// UserID returns the authenticated user's ID, and false when the request did
+// not pass through Middleware.
+func UserID(c *medusa.Context) (int64, bool) {
+	id, ok := c.Get(userIDKey)
 	if !ok {
-		panic("medusa: user not authenticated")
+		return 0, false
 	}
-	return id
+
+	userID, ok := id.(int64)
+	return userID, ok
 }
 
-// IsAuthenticated returns true if user is authenticated.
-func (c *Context) IsAuthenticated() bool {
-	_, exists := c.UserID()
-	return exists
-}
-
-// SetUserID sets the authenticated user ID (called by auth middleware).
-func (c *Context) SetUserID(id uint) {
-	c.Set(UserIDContextKey, id)
+func setUserID(c *gin.Context, id int64) {
+	c.Set(userIDKey, id)
 }

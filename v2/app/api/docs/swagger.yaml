@@ -1,19 +1,19 @@
 definitions:
-  github_com_imlargo_medusa_internal_dto.AuthResponse:
+  github_com_imlargo_medusa_app_internal_dto.AuthResponse:
     properties:
       tokens:
-        $ref: '#/definitions/github_com_imlargo_medusa_internal_dto.AuthTokens'
+        $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.AuthTokens'
       user:
-        $ref: '#/definitions/github_com_imlargo_medusa_internal_models.User'
+        $ref: '#/definitions/github_com_imlargo_medusa_app_internal_models.User'
     type: object
-  github_com_imlargo_medusa_internal_dto.AuthTokens:
+  github_com_imlargo_medusa_app_internal_dto.AuthTokens:
     properties:
       access_token:
         type: string
       refresh_token:
         type: string
     type: object
-  github_com_imlargo_medusa_internal_dto.LoginWithPassword:
+  github_com_imlargo_medusa_app_internal_dto.LoginWithPassword:
     properties:
       email:
         type: string
@@ -23,14 +23,14 @@ definitions:
     - email
     - password
     type: object
-  github_com_imlargo_medusa_internal_dto.RegisterUser:
+  github_com_imlargo_medusa_app_internal_dto.RegisterUser:
     properties:
       email:
         type: string
       password:
         type: string
     type: object
-  github_com_imlargo_medusa_internal_models.User:
+  github_com_imlargo_medusa_app_internal_models.User:
     properties:
       created_at:
         type: string
@@ -41,45 +41,53 @@ definitions:
       updated_at:
         type: string
     type: object
-  github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorCode:
+  httperr.Code:
     enum:
     - BAD_REQUEST
-    - BIND_JSON
+    - VALIDATION_FAILED
     - UNAUTHORIZED
     - FORBIDDEN
     - NOT_FOUND
     - CONFLICT
+    - PAYLOAD_TOO_LARGE
     - TOO_MANY_REQUESTS
     - INTERNAL_SERVER_ERROR
     - SERVICE_UNAVAILABLE
     type: string
     x-enum-varnames:
-    - ErrCodeBadRequest
-    - ErrCodeBindJson
-    - ErrCodeUnauthorized
-    - ErrCodeForbidden
-    - ErrCodeNotFound
-    - ErrCodeConflict
-    - ErrCodeTooManyRequests
-    - ErrCodeInternalServer
-    - ErrCodeServiceUnavailable
-  github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse:
+    - CodeBadRequest
+    - CodeValidation
+    - CodeUnauthorized
+    - CodeForbidden
+    - CodeNotFound
+    - CodeConflict
+    - CodePayloadTooLarge
+    - CodeTooManyRequests
+    - CodeInternal
+    - CodeServiceUnavailable
+  medusa.ErrorResponse:
     properties:
       code:
-        allOf:
-        - $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorCode'
-        description: Machine-readable error code
-      details:
-        description: Optional error details (e.g., validation errors)
+        $ref: '#/definitions/httperr.Code'
+      details: {}
       error:
-        description: Human-readable error message
         type: string
       request_id:
-        description: Request ID for tracing (if available)
         type: string
       status:
-        description: HTTP status code (e.g., 400, 404, 500)
         type: integer
+    type: object
+  medusa.SuccessResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      request_id:
+        type: string
+      status:
+        type: integer
+      success:
+        type: boolean
     type: object
 info:
   contact:
@@ -96,31 +104,38 @@ paths:
     post:
       consumes:
       - application/json
-      description: Login user with email and password
+      description: Login with email and password
       parameters:
-      - description: Login user request payload
+      - description: Credentials
         in: body
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/github_com_imlargo_medusa_internal_dto.LoginWithPassword'
+          $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.LoginWithPassword'
       produces:
       - application/json
       responses:
         "200":
-          description: User logged in successfully
+          description: Logged in
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_internal_dto.AuthResponse'
+            allOf:
+            - $ref: '#/definitions/medusa.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.AuthResponse'
+              type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse'
+            $ref: '#/definitions/medusa.ErrorResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/medusa.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse'
-      security:
-      - BearerAuth: []
+            $ref: '#/definitions/medusa.ErrorResponse'
       summary: Login user
       tags:
       - auth
@@ -128,31 +143,38 @@ paths:
     post:
       consumes:
       - application/json
-      description: Register a new user with email, password
+      description: Register a new user with email and password
       parameters:
-      - description: Register user request payload
+      - description: Registration payload
         in: body
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/github_com_imlargo_medusa_internal_dto.RegisterUser'
+          $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.RegisterUser'
       produces:
       - application/json
       responses:
-        "200":
-          description: User registered successfully
+        "201":
+          description: Registered
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_internal_dto.AuthResponse'
+            allOf:
+            - $ref: '#/definitions/medusa.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_imlargo_medusa_app_internal_dto.AuthResponse'
+              type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse'
+            $ref: '#/definitions/medusa.ErrorResponse'
+        "409":
+          description: Email already registered
+          schema:
+            $ref: '#/definitions/medusa.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse'
-      security:
-      - BearerAuth: []
+            $ref: '#/definitions/medusa.ErrorResponse'
       summary: Register user
       tags:
       - auth
@@ -163,17 +185,22 @@ paths:
       - application/json
       responses:
         "200":
-          description: Authenticated user's
+          description: The authenticated user
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_internal_models.User'
+            allOf:
+            - $ref: '#/definitions/medusa.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_imlargo_medusa_app_internal_models.User'
+              type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse'
+            $ref: '#/definitions/medusa.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_imlargo_medusa_pkg_medusa_core_responses.ErrorResponse'
+            $ref: '#/definitions/medusa.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get user info

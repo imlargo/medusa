@@ -1,41 +1,34 @@
-// Package middleware provides HTTP middleware components for Medusa applications.
-// It includes authentication, authorization, rate limiting, CORS, and metrics collection.
-package middleware
+package auth
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/medusa/pkg/medusa"
-	"github.com/imlargo/medusa/pkg/medusa/core/jwt"
-	"github.com/imlargo/medusa/pkg/medusa/core/responses"
+
+	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/httperr"
 )
 
-// NewJWTAuthMiddleware creates a middleware that validates JWT tokens from the Authorization header.
-// It expects the token in the format "Bearer <token>".
-// On successful validation, it extracts the user ID from the token claims and stores it in the context.
-// If validation fails, it aborts the request with an Unauthorized response.
-func NewJWTAuthMiddleware(jwtAuth *jwt.JWT) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		medusaCtx := medusa.NewContext(ctx)
-
-		token, err := medusaCtx.BearerToken()
+// Middleware requires an "Authorization: Bearer <token>" header with a valid
+// access token and makes the user's ID available through UserID.
+func Middleware(j *JWT) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, err := medusa.NewContext(c).BearerToken()
 		if err != nil {
-			responses.AbortWithError(ctx, responses.Unauthorized(err.Error()))
+			medusa.AbortWithError(c, httperr.Unauthorized(err.Error()))
 			return
 		}
 
 		if token == "" {
-			responses.AbortWithError(ctx, responses.Unauthorized("token is empty"))
+			medusa.AbortWithError(c, httperr.Unauthorized("token is empty"))
 			return
 		}
 
-		tokenData, err := jwtAuth.ParseToken(token)
+		claims, err := j.ParseToken(token)
 		if err != nil {
-			responses.AbortWithError(ctx, responses.Unauthorized("invalid or expired token"))
+			medusa.AbortWithError(c, httperr.Unauthorized("invalid or expired token"))
 			return
 		}
 
-		medusaCtx.SetUserID(tokenData.UserID)
-
-		ctx.Next()
+		setUserID(c, claims.UserID)
+		c.Next()
 	}
 }

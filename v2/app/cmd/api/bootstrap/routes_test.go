@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,16 +10,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/imlargo/medusa/internal/config"
-	"github.com/imlargo/medusa/internal/handlers"
-	"github.com/imlargo/medusa/pkg/medusa/core/handler"
-	"github.com/imlargo/medusa/pkg/medusa/core/jwt"
-	"github.com/imlargo/medusa/pkg/medusa/core/logger"
-	"github.com/imlargo/medusa/pkg/medusa/core/metrics"
-	"github.com/imlargo/medusa/pkg/medusa/services/health"
 	"github.com/imlargo/ratelimit"
 	"github.com/imlargo/sse"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/imlargo/medusa/health"
+	"github.com/imlargo/medusa/metrics"
+
+	"github.com/imlargo/medusa/app/internal/auth"
+	"github.com/imlargo/medusa/app/internal/config"
+	"github.com/imlargo/medusa/app/internal/handlers"
 )
 
 // newTestContainer builds a container with only the pieces the router touches,
@@ -26,14 +27,13 @@ import (
 func newTestContainer(t *testing.T, mutate func(*Container)) *Container {
 	t.Helper()
 
-	log := logger.NewLogger()
 	c := &Container{
 		Config: &config.Config{
 			Environment: config.EnvDevelopment,
 		},
-		Logger:          log,
-		JWT:             jwt.MustNewJWT(jwt.Config{Secret: strings.Repeat("s", 32)}),
-		HealthService:   health.NewService(time.Second),
+		Logger:          slog.New(slog.DiscardHandler),
+		JWT:             auth.MustNewJWT(strings.Repeat("s", 32)),
+		HealthService:   health.New(time.Second),
 		Events:          sse.NewBroker("events", sse.NewMemoryLog(sse.Retention{For: time.Minute})),
 		EventsLifecycle: sse.NewLifecycle(),
 	}
@@ -41,8 +41,8 @@ func newTestContainer(t *testing.T, mutate func(*Container)) *Container {
 	c.Config.Server.Port = 8000
 
 	c.Handlers = &Handlers{
-		Health: handler.NewHealthHandler(handler.NewHandler(log), c.HealthService),
-		Events: handlers.NewEventsHandler(handler.NewHandler(log), c.Events, c.EventsLifecycle, c.JWT),
+		Health: health.NewHandler(c.HealthService),
+		Events: handlers.NewEventsHandler(c.Events, c.EventsLifecycle, c.JWT),
 	}
 
 	if mutate != nil {
@@ -82,11 +82,11 @@ func TestMetricsEndpointFollowsTheMetricsService(t *testing.T) {
 	t.Run("exposed when enabled", func(t *testing.T) {
 		router := newRouter(newTestContainer(t, func(c *Container) {
 			registry := prometheus.NewRegistry()
-			metricsService, err := metrics.NewPrometheusMetrics(registry)
+			httpMetrics, err := metrics.NewHTTP(registry)
 			if err != nil {
-				t.Fatalf("NewPrometheusMetrics() = %v, want nil error", err)
+				t.Fatalf("NewHTTP() = %v, want nil error", err)
 			}
-			c.Metrics = metricsService
+			c.Metrics = httpMetrics
 			c.MetricsRegistry = registry
 		}))
 
@@ -156,7 +156,7 @@ func TestGinModeFollowsEnvironment(t *testing.T) {
 // registry is injected. With the global default registry this panicked.
 func TestMetricsCanBeBuiltTwice(t *testing.T) {
 	for i := range 2 {
-		if _, err := metrics.NewPrometheusMetrics(prometheus.NewRegistry()); err != nil {
+		if _, err := metrics.NewHTTP(prometheus.NewRegistry()); err != nil {
 			t.Fatalf("build %d = %v, want nil error", i, err)
 		}
 	}

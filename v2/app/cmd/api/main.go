@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/imlargo/medusa/cmd/api/bootstrap"
+	"github.com/imlargo/medusa/app/cmd/api/bootstrap"
 )
 
 // appName identifies the application in logs and in the startup banner.

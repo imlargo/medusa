@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imlargo/medusa/pkg/medusa/services/storage"
+	"github.com/imlargo/medusa/storage"
 )
 
 // validEnv is the smallest environment that loads successfully.

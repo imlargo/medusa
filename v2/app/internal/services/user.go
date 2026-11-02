@@ -5,17 +5,19 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/imlargo/medusa/internal/dto"
-	"github.com/imlargo/medusa/internal/models"
-	"github.com/imlargo/medusa/pkg/medusa/core/responses"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
+
+	"github.com/imlargo/medusa/httperr"
+
+	"github.com/imlargo/medusa/app/internal/dto"
+	"github.com/imlargo/medusa/app/internal/models"
+	"github.com/imlargo/medusa/app/internal/repositories"
 )
 
 type UserService interface {
 	CreateUser(ctx context.Context, user *dto.RegisterUser) (*models.User, error)
-	DeleteUser(ctx context.Context, userID uint) error
-	GetUserByID(ctx context.Context, userID uint) (*models.User, error)
+	DeleteUser(ctx context.Context, userID int64) error
+	GetUserByID(ctx context.Context, userID int64) (*models.User, error)
 	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
 }
 
@@ -37,33 +39,33 @@ func (s *userServiceImpl) CreateUser(ctx context.Context, registerUser *dto.Regi
 	// meant a database outage read as a free email address, so registration
 	// carried on and failed later with something unrelated.
 	existing, err := s.store.Users.GetByEmail(ctx, email)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, responses.Internal(err)
+	if err != nil && !errors.Is(err, repositories.ErrNotFound) {
+		return nil, httperr.Internal(err)
 	}
 	if existing != nil {
-		return nil, responses.Conflict("a user with this email already exists")
+		return nil, errEmailTaken()
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(registerUser.Password), bcrypt.DefaultCost)
 	if err != nil {
 		// The cause is kept for the log; the client gets the generic message.
-		return nil, responses.InternalWithMessage("could not process the password", err)
+		return nil, httperr.InternalWithMessage("could not process the password", err)
 	}
 
-	user := &models.User{
-		Email:    email,
-		Password: string(hashedPassword),
+	user, err := s.store.Users.Create(ctx, email, string(hashedPassword))
+	if errors.Is(err, repositories.ErrDuplicate) {
+		// Lost a race with a concurrent registration of the same email.
+		return nil, errEmailTaken()
 	}
-
-	if err := s.store.Users.Create(ctx, user); err != nil {
-		return nil, responses.Internal(err)
+	if err != nil {
+		return nil, httperr.Internal(err)
 	}
 
 	return user, nil
 }
 
 // DeleteUser removes an account.
-func (s *userServiceImpl) DeleteUser(ctx context.Context, userID uint) error {
+func (s *userServiceImpl) DeleteUser(ctx context.Context, userID int64) error {
 	if err := s.store.Users.Delete(ctx, userID); err != nil {
 		return classifyUserError(err)
 	}
@@ -72,7 +74,7 @@ func (s *userServiceImpl) DeleteUser(ctx context.Context, userID uint) error {
 }
 
 // GetUserByID looks an account up by its primary key.
-func (s *userServiceImpl) GetUserByID(ctx context.Context, userID uint) (*models.User, error) {
+func (s *userServiceImpl) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
 	user, err := s.store.Users.Get(ctx, userID)
 	if err != nil {
 		return nil, classifyUserError(err)
@@ -92,11 +94,15 @@ func (s *userServiceImpl) GetUserByEmail(ctx context.Context, email string) (*mo
 }
 
 // classifyUserError turns a repository error into one carrying an HTTP status,
-// so a missing row answers 404 instead of the 500 a raw gorm error produces.
+// so a missing row answers 404 instead of 500.
 func classifyUserError(err error) error {
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return responses.NotFound("user")
+	if errors.Is(err, repositories.ErrNotFound) {
+		return httperr.NotFound("user")
 	}
 
-	return responses.Internal(err)
+	return httperr.Internal(err)
+}
+
+func errEmailTaken() error {
+	return httperr.Conflict("a user with this email already exists")
 }
