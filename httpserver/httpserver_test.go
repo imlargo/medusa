@@ -160,7 +160,7 @@ func TestStopDrainsEvenWithACanceledContext(t *testing.T) {
 
 	respCh := make(chan *http.Response, 1)
 	go func() {
-		resp, err := http.Get("http://" + srv.Addr() + "/slow")
+		resp, err := http.Get("http://" + srv.Addr() + "/slow") //nolint:bodyclose // closed below, after it is read from respCh
 		if err == nil {
 			respCh <- resp
 		} else {
