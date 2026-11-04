@@ -127,11 +127,16 @@ type Error struct {
 // starting with the owning domain (user.email_taken); New panics otherwise,
 // so a malformed code fails when its package loads. message must be safe to
 // show to a client: never build it from an error or from user input.
+//
+// Declare errors once, as package variables: every declaration is recorded
+// for Declared.
 func New(kind Kind, code, message string) *Error {
 	if !codePattern.MatchString(code) {
 		panic(fmt.Sprintf("apperr: code %q must look like domain.rule (lowercase, dot-separated)", code))
 	}
-	return &Error{kind: kind, code: code, message: message}
+	e := &Error{kind: kind, code: code, message: message}
+	register(e)
+	return e
 }
 
 // Invalid declares a KindInvalid error.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/imlargo/medusa/apperr"
@@ -107,5 +108,22 @@ func TestErrorStringIsForLogs(t *testing.T) {
 	want := "user.email_taken: a user with this email already exists: 23505"
 	if got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+func TestDeclaredListsEveryDeclarationOnceSortedByCode(t *testing.T) {
+	b := apperr.Conflict("zz_test.b", "b")
+	a := apperr.NotFound("zz_test.a", "a")
+	_ = apperr.NotFound("zz_test.a", "a") // the same declaration again
+
+	var got []*apperr.Error
+	for _, e := range apperr.Declared() {
+		if strings.HasPrefix(e.Code(), "zz_test.") {
+			got = append(got, e)
+		}
+	}
+
+	if len(got) != 2 || got[0] != a || got[1] != b {
+		t.Errorf("Declared() = %v, want [%v %v]", got, a, b)
 	}
 }
