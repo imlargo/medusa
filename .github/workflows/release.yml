@@ -41,10 +41,13 @@ jobs:
           echo "module=$module" >> "$GITHUB_OUTPUT"
           echo "version=v$version" >> "$GITHUB_OUTPUT"
 
+      # Only a core release is "latest": that is the one the repository page
+      # shows, and a battery release would hide it.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "${{ steps.module.outputs.module }} ${{ steps.module.outputs.version }}" --notes-file notes.md
+          LATEST: ${{ !contains(github.ref_name, '/') }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --latest="$LATEST" --title "${{ steps.module.outputs.module }} ${{ steps.module.outputs.version }}" --notes-file notes.md
 
       - name: Publish to the Go proxy
         run: curl -fsS "https://proxy.golang.org/${{ steps.module.outputs.module }}/@v/${{ steps.module.outputs.version }}.info"

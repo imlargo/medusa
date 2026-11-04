@@ -15,9 +15,11 @@ Production project. Quality target: an enterprise-grade Go codebase, following t
 - Gin stays as the HTTP layer. Medusa works with Gin instead of hiding it.
 - Medusa's public API must not lock in a data access library.
 
-## Status (2026-11-03)
+## Status (2026-11-04)
 
-Separating Medusa from the app is done on branch `refactor/separate-medusa-20261101` (pushed, not merged). Data access moved from GORM to pgx v5 + sqlc + goose in the same phase.
+Medusa is on `main` (PR #19) and released: the core and every battery are at `v0.1.0` (GitHub releases and the Go proxy). The app is the example built on Medusa; it is not deployed and has no clients.
+
+The separation from the app came first. Data access moved from GORM to pgx v5 + sqlc + goose in the same phase.
 
 Iterated with lessons from the hellobutter/butter backend, a large production app on the old stack:
 
@@ -50,6 +52,16 @@ Then CI and a review pass (2026-11-03):
   - bad query parameters are `request.invalid_parameter`;
   - `/ready` no longer includes the checks' error messages.
 
+Then the rest of phase 1 that needed no decision, and more batteries (2026-11-04):
+
+- Shutdown leaves the load balancer's rotation first (`SHUTDOWN_DRAIN_DELAY`).
+- Every request has a deadline (`REQUEST_TIMEOUT`), and responses carry secure headers.
+- `request_id` is on every log line.
+- The error code catalog (`app/api/errors.md`) is generated and checked in CI.
+- `storage` and the new `env` battery left the core.
+- Migrations take a lock, and `pgtest` clones a migrated template.
+- An end-to-end account flow test runs against Postgres in CI.
+
 ## What's next
 
-The phases, open items, pending decisions and how the work runs are in [docs/roadmap.md](docs/roadmap.md). CI now runs the database tests, `-race`, lint, govulncheck and the Docker build on every push. What is left of phase 0 is the end-to-end check on a real database, the merge and the first tags.
+The phases, open items, pending decisions and how the work runs are in [docs/roadmap.md](docs/roadmap.md). Phase 0 is done. `main` only takes PRs whose `ci` check passed, and a module is released by its tag (see Release a module in AGENTS.md). Next are the decisions D1-D7, which unblock the auth battery, the `api` battery and the `queue` battery.
