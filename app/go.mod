@@ -6,7 +6,7 @@ toolchain go1.27.3
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/imlargo/medusa v0.0.0
+	github.com/imlargo/medusa v0.1.0
 	github.com/imlargo/medusa/auth v0.0.0
 	github.com/imlargo/medusa/env v0.0.0
 	github.com/imlargo/medusa/postgres v0.0.0
