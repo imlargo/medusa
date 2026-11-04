@@ -18,7 +18,7 @@ var (
 
 	// ErrInvalidParameter: a path or query parameter is missing or does not
 	// parse. The error names it when the parameter is known.
-	ErrInvalidParameter = apperr.Invalid("request.invalid_parameter", "a URL parameter is invalid")
+	ErrInvalidParameter = apperr.Invalid("request.invalid_parameter", "a path or query parameter is invalid")
 
 	// ErrMissingCredentials: the Authorization header is missing.
 	ErrMissingCredentials = apperr.Unauthenticated("auth.missing_credentials", "the authorization header is missing")
