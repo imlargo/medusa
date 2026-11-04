@@ -10,6 +10,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver goose runs on
 	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 )
 
 // Migrate applies every pending goose migration in migrations to the
@@ -19,8 +20,10 @@ import (
 //	//go:embed *.sql
 //	var FS embed.FS
 //
-// Run it as its own deploy step, never on API startup, so replicas cannot
-// race each other through the same migration.
+// Run it as its own deploy step, never on API startup. Two runs at once (two
+// deploys, or a retried job) are serialized by a Postgres advisory lock, so
+// the second waits and then finds nothing to apply. The lock lives in the
+// session, so the URL must not go through a pooler in transaction mode.
 func Migrate(ctx context.Context, url string, migrations fs.FS, logger *slog.Logger) (err error) {
 	db, err := sql.Open("pgx", url)
 	if err != nil {
@@ -32,7 +35,12 @@ func Migrate(ctx context.Context, url string, migrations fs.FS, logger *slog.Log
 		}
 	}()
 
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations)
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return fmt.Errorf("build migration lock: %w", err)
+	}
+
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations, goose.WithSessionLocker(locker))
 	if err != nil {
 		return fmt.Errorf("load migrations: %w", err)
 	}
