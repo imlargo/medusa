@@ -24,7 +24,7 @@ type MetricsRecorder interface {
 // preflights are skipped.
 func Metrics(recorder MetricsRecorder) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.GetHeader("Accept") == "text/event-stream" || c.Request.Method == http.MethodOptions {
+		if c.GetHeader("Accept") == eventStream || c.Request.Method == http.MethodOptions {
 			c.Next()
 			return
 		}
