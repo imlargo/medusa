@@ -13,7 +13,9 @@ import (
 const requestIDHeader = "X-Request-ID"
 
 // RequestID gives every request an ID and echoes it in the response.
-// Handlers read it with medusa.Context.RequestID.
+// Handlers read it with medusa.Context.RequestID, and code that only has the
+// request's context.Context with medusa.RequestIDFrom, which is also how
+// medusa.LogHandler adds it to every log line.
 //
 // A caller's X-Request-ID is reused only when it is a valid UUID, rewritten in
 // canonical form. Anything else is replaced: the ID is written to logs and
@@ -27,6 +29,7 @@ func RequestID() gin.HandlerFunc {
 		}
 
 		c.Set(medusa.RequestIDKey, id)
+		c.Request = c.Request.WithContext(medusa.WithRequestID(c.Request.Context(), id))
 		c.Header(requestIDHeader, id)
 		c.Next()
 	}

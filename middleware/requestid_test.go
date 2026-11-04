@@ -72,3 +72,21 @@ func TestRequestIDReplacesAnythingThatIsNotAUUID(t *testing.T) {
 		})
 	}
 }
+
+// Services only get the request's context.Context, so the ID has to travel
+// in it too, not only in Gin's context.
+func TestRequestIDTravelsInTheRequestContext(t *testing.T) {
+	var fromCtx, fromGin string
+	router := gin.New()
+	router.Use(middleware.RequestID())
+	router.GET("/x", func(c *gin.Context) {
+		fromCtx = medusa.RequestIDFrom(c.Request.Context())
+		fromGin = medusa.NewContext(c).RequestID()
+	})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/x", nil))
+
+	if fromCtx == "" || fromCtx != fromGin {
+		t.Errorf("RequestIDFrom(ctx) = %q, want the request ID %q", fromCtx, fromGin)
+	}
+}

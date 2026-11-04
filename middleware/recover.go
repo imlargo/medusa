@@ -32,7 +32,6 @@ func Recover(logger *slog.Logger) gin.HandlerFunc {
 
 			logger.LogAttrs(c.Request.Context(), slog.LevelError, "panic recovered",
 				slog.Any("panic", v),
-				slog.String("request_id", c.GetString(medusa.RequestIDKey)),
 				slog.String("stack", string(debug.Stack())),
 			)
 
