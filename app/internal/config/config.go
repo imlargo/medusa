@@ -18,8 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imlargo/medusa/storage"
 	"github.com/joho/godotenv"
+
+	"github.com/imlargo/medusa/storage"
 )
 
 // Environment identifies the deployment the process is running in.

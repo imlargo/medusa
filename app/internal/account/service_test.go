@@ -60,8 +60,8 @@ func TestLoginFailuresAreIndistinguishable(t *testing.T) {
 		"wrong password": {"ada@example.com", "battery staple"},
 		"unknown email":  {"nobody@example.com", "correct horse"},
 	} {
-		if _, err := svc.Login(ctx, creds[0], creds[1]); err != account.ErrInvalidCredentials {
-			t.Errorf("Login(%s) = %v, want exactly ErrInvalidCredentials", name, err)
+		if _, err := svc.Login(ctx, creds[0], creds[1]); !errors.Is(err, account.ErrInvalidCredentials) {
+			t.Errorf("Login(%s) = %v, want ErrInvalidCredentials", name, err)
 		}
 	}
 }

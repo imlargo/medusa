@@ -254,7 +254,7 @@ func From(err error) *Error {
 	}
 
 	if appErr, ok := errors.AsType[*Error](err); ok {
-		if appErr.cause == nil && appErr != err {
+		if appErr.cause == nil && appErr != err { //nolint:errorlint // identity on purpose: is err the declared error itself or a wrapper of it
 			// err wrapped a declared error: keep the wrapping for the log.
 			return appErr.WithCause(err)
 		}

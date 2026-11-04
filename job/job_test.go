@@ -158,7 +158,9 @@ func TestStopGivesUpAfterTheStopTimeout(t *testing.T) {
 		if err := p.Stop(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("Stop() = %v, want a deadline error", err)
 		}
-		<-started
+		if err := <-started; err != nil {
+			t.Errorf("Start() = %v, want nil once stopped", err)
+		}
 	})
 }
 

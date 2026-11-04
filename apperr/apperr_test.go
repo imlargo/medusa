@@ -19,7 +19,7 @@ func TestNewRejectsMalformedCodes(t *testing.T) {
 					t.Errorf("New(%q) did not panic", code)
 				}
 			}()
-			apperr.New(apperr.KindInvalid, code, "message")
+			_ = apperr.New(apperr.KindInvalid, code, "message")
 		})
 	}
 }
@@ -91,7 +91,7 @@ func TestFrom(t *testing.T) {
 			if got.Code() != tt.wantCode || got.Kind() != tt.wantKind {
 				t.Errorf("From() = %s/%s, want %s/%s", got.Code(), got.Kind(), tt.wantCode, tt.wantKind)
 			}
-			if tt.wantCause != nil && got.Cause() != tt.wantCause {
+			if tt.wantCause != nil && !errors.Is(got.Cause(), tt.wantCause) {
 				t.Errorf("Cause() = %v, want %v", got.Cause(), tt.wantCause)
 			}
 		})

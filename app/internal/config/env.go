@@ -14,7 +14,7 @@ const (
 
 	envJWTSecret            = "JWT_SECRET"
 	envJWTIssuer            = "JWT_ISSUER"
-	envJWTTokenExpiration   = "JWT_TOKEN_EXPIRATION"
+	envJWTTokenExpiration   = "JWT_TOKEN_EXPIRATION" //nolint:gosec // G101: the name of a variable, not a credential
 	envJWTRefreshExpiration = "JWT_REFRESH_EXPIRATION"
 
 	envCORSAllowedOrigins = "CORS_ALLOWED_ORIGINS"
