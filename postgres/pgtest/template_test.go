@@ -23,7 +23,8 @@ func TestHashFilesChangesWithTheMigrations(t *testing.T) {
 		return s
 	}
 
-	if sum(base) != sum(base) {
+	again := fstest.MapFS{"00001_init.sql": {Data: []byte("CREATE TABLE a ();")}}
+	if sum(base) != sum(again) {
 		t.Error("the same migrations hash differently")
 	}
 	if sum(base) == sum(edited) || sum(base) == sum(added) {
