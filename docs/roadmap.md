@@ -4,13 +4,13 @@ Where Medusa is going and how the work is run. Status and context live in [conte
 
 The goal: a batteries-included Go framework on Gin whose batteries are opt-in (ADR 0002), so that the code most APIs need is written once, here, and never again in each app.
 
-## Where it stands (2026-11-03)
+## Where it stands (2026-11-04)
 
 Built on branch `refactor/separate-medusa-20261101`, not merged:
 
 - Medusa separated from the app (ADR 0001); pgx + sqlc + goose instead of GORM.
-- Core: `medusa`, `apperr`, `httperr`, `middleware`, `health`, `httpserver`, `lifecycle`, `job`, `metrics`, `storage`.
-- Batteries: `postgres` (+ `pgtest`), `auth` (ADR 0002).
+- Core: `medusa`, `apperr`, `httperr`, `middleware`, `health`, `httpserver`, `lifecycle`, `job`, `metrics`. The core no longer pulls the AWS SDK or godotenv.
+- Batteries: `auth`, `env`, `postgres` (+ `pgtest`), `storage` (ADR 0002).
 - Errors as declared `apperr` values, RFC 9457 responses, app by feature (ADR 0003).
 - CI (`.github/workflows/ci.yml`) checks every module on its own: tidy, vet, `go test -race -shuffle=on` against a real Postgres with the database tests required, golangci-lint v2, govulncheck, and the Docker build.
 
@@ -35,11 +35,11 @@ What still stands between it and large production use, in order:
 
 1. Access and refresh tokens are not told apart (1.1).
 2. Only authentication exists: no scopes or roles, and the caller is not in `context.Context` for services (1.5).
-3. Shutdown is not coordinated with readiness, so rolling deploys drop requests (1.6).
-4. No per-request deadline (1.7).
-5. No tracing, and only the access log carries the request ID (3.2, 3.3).
-6. Per-process state: rate limits, SSE and jobs (phase 4).
-7. Routes are documented by swag comments that drift (2.1).
+3. No tracing (3.3). Request IDs already reach every log line (3.2).
+4. Per-process state: rate limits, SSE and jobs (phase 4).
+5. Routes are documented by swag comments that drift (2.1).
+
+Closed since the review: shutdown coordinated with readiness (1.6), a deadline on every request (1.7), secure headers (1.8), the error catalog (1.4), and `storage` and `env` as batteries (2.7, 2.2).
 
 ## Phases
 
