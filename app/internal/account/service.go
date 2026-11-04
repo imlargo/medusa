@@ -5,6 +5,7 @@ package account
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -26,6 +27,17 @@ type Tokens struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+// maxPasswordBytes is the most bcrypt hashes; it rejects anything longer.
+const maxPasswordBytes = 72
+
+// dummyHash is compared against when the email is unknown, so a login takes
+// as long for an unknown email as for a wrong password and its timing does
+// not reveal which emails have accounts.
+var dummyHash = sync.OnceValue(func() []byte {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("medusa-dummy-password"), bcrypt.DefaultCost)
+	return hash
+})
+
 // Service registers and signs in accounts.
 type Service struct {
 	users      *user.Repository
@@ -41,8 +53,12 @@ func NewService(users *user.Repository, tokens *auth.JWT[int64], accessTTL, refr
 }
 
 // Register creates an account and signs it in. A taken email is
-// user.ErrEmailTaken.
+// user.ErrEmailTaken, a password over 72 bytes ErrPasswordTooLong.
 func (s *Service) Register(ctx context.Context, email, password string) (*Session, error) {
+	if len(password) > maxPasswordBytes {
+		return nil, ErrPasswordTooLong
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, ErrPasswordHashFailed.WithCause(err)
@@ -63,6 +79,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 func (s *Service) Login(ctx context.Context, email, password string) (*Session, error) {
 	found, err := s.users.GetByEmail(ctx, email)
 	if errors.Is(err, user.ErrNotFound) {
+		_ = bcrypt.CompareHashAndPassword(dummyHash(), []byte(password))
 		return nil, ErrInvalidCredentials
 	}
 	if err != nil {

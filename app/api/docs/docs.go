@@ -130,7 +130,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "request.validation_failed",
+                        "description": "request.validation_failed, account.password_too_long",
                         "schema": {
                             "$ref": "#/definitions/httperr.Problem"
                         }

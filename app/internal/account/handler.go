@@ -57,7 +57,7 @@ func (h *Handler) Login(ctx *medusa.Context, in *LoginRequest) (*Session, error)
 //	@Produce		json
 //	@Param			payload	body		account.RegisterRequest							true	"Registration payload"
 //	@Success		201		{object}	medusa.SuccessResponse{data=account.Session}	"Registered"
-//	@Failure		400		{object}	httperr.Problem									"request.validation_failed"
+//	@Failure		400		{object}	httperr.Problem									"request.validation_failed, account.password_too_long"
 //	@Failure		409		{object}	httperr.Problem									"user.email_taken"
 //	@Failure		500		{object}	httperr.Problem									"Internal Server Error"
 func (h *Handler) Register(ctx *medusa.Context, in *RegisterRequest) (*Session, error) {
