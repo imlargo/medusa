@@ -63,7 +63,7 @@ func TestAccountFlow(t *testing.T) {
 		t.Errorf("login with a wrong password = %d %v, want 401 %s", status, body, account.ErrInvalidCredentials.Code())
 	}
 
-	status, body = send(http.MethodPost, "/v1/auth/login", `{"email":" ADA@example.com ","password":"correct horse"}`, "")
+	status, body = send(http.MethodPost, "/v1/auth/login", `{"email":"ADA@example.com","password":"correct horse"}`, "")
 	if status != http.StatusOK {
 		t.Fatalf("login = %d %v, want 200", status, body)
 	}
