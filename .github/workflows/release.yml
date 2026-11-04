@@ -1,0 +1,50 @@
+name: release
+
+# A Go module is published by its tag: v1.2.3 for the core, <dir>/v1.2.3 for a
+# battery. This turns the tag into a GitHub release with that version's
+# changelog section, and asks the Go proxy for it so pkg.go.dev lists it.
+on:
+  push:
+    tags: ["v*", "*/v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read the module and its changelog section
+        id: module
+        run: |
+          tag="$GITHUB_REF_NAME"
+          case "$tag" in
+            */v*) dir="${tag%/v*}"; version="${tag##*/v}" ;;
+            *)    dir="."; version="${tag#v}" ;;
+          esac
+
+          module="$(awk '$1 == "module" { print $2 }' "$dir/go.mod")"
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            /^## \[/ { found = 0 }
+            /^\[[^]]+\]: / { found = 0 }
+            found
+          ' "$dir/CHANGELOG.md" > notes.md
+
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::$dir/CHANGELOG.md has no section for $version"
+            exit 1
+          fi
+
+          echo "module=$module" >> "$GITHUB_OUTPUT"
+          echo "version=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "${{ steps.module.outputs.module }} ${{ steps.module.outputs.version }}" --notes-file notes.md
+
+      - name: Publish to the Go proxy
+        run: curl -fsS "https://proxy.golang.org/${{ steps.module.outputs.module }}/@v/${{ steps.module.outputs.version }}.info"

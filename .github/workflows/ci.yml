@@ -116,3 +116,17 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # The one check main's protection requires, so adding a module to the
+  # matrices never needs a settings change.
+  ci:
+    if: always()
+    needs: [test, lint, vulncheck, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job passed
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = "true" ]; then
+            echo "::error::a required job did not pass"
+            exit 1
+          fi
