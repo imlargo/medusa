@@ -69,8 +69,10 @@ func NewWithOptions(ctx context.Context, name string, opts Options) (*App, error
 			lifecycle.WithName(name),
 			lifecycle.WithServer(server),
 			lifecycle.WithLogger(container.Logger),
-			// Runs before the HTTP server stops, so open SSE streams end on
-			// their own instead of holding the shutdown open.
+			// Both run before the HTTP server stops, in this order: first
+			// the load balancer stops sending requests, then open SSE
+			// streams end on their own instead of holding the shutdown open.
+			lifecycle.WithOnStop(container.LeaveRotation),
 			lifecycle.WithOnStop(container.DrainEventStreams),
 		),
 		Container: container,

@@ -41,6 +41,7 @@ func newTestContainer(t *testing.T, mutate func(*Container)) *Container {
 	}
 	c.Config.Server.Host = "localhost"
 	c.Config.Server.Port = 8000
+	c.Config.Runtime.RequestTimeout = time.Minute
 
 	c.Handlers = &Handlers{
 		Health: health.NewHandler(c.HealthService),

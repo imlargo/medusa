@@ -20,6 +20,8 @@ const (
 	envCORSAllowedOrigins = "CORS_ALLOWED_ORIGINS"
 
 	envShutdownTimeout = "SHUTDOWN_TIMEOUT"
+	envDrainDelay      = "SHUTDOWN_DRAIN_DELAY"
+	envRequestTimeout  = "REQUEST_TIMEOUT"
 	envMaxRequestBody  = "MAX_REQUEST_BODY_BYTES"
 	envDocsEnabled     = "DOCS_ENABLED"
 
@@ -51,6 +53,11 @@ const (
 	// to fit inside the orchestrator's termination grace period, which is only
 	// 10s for `docker stop` and 30s for Kubernetes by default.
 	defaultShutdownTimeout = 10 * time.Second
+
+	// defaultRequestTimeout bounds the work done for one request. Under the
+	// server's write timeout, so a slow handler gets a 503 problem instead of
+	// a cut connection.
+	defaultRequestTimeout = 30 * time.Second
 
 	// defaultMaxRequestBody caps a JSON request body at 1 MiB. Without a cap the
 	// server will read whatever a client sends into memory.

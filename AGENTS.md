@@ -43,8 +43,8 @@ Core:
 | `medusa` (root) | `Context`, `Handle`/`HandleCreate`/`HandleUpdate`/`HandleGet`/`HandleDelete`, response writers, `RequestIDKey`, the request errors (`ErrValidation`, `ErrMissingCredentials`...) |
 | `apperr` | `Error`, `Kind`, declaring constructors (`NotFound`, `Conflict`, `FailedPrecondition`...), `From` |
 | `httperr` | `Status(kind)`, `Problem` (RFC 9457), `NewProblem`, `Write` for plain net/http |
-| `middleware` | `RequestID`, `Recover`, `CORS`, `BodyLimit`, `Metrics`, `RateLimit`, `APIKey`, `BearerAPIKey` |
-| `health` | `Service.Register(name, fn)`, `Handler.Live`, `Handler.Ready` |
+| `middleware` | `RequestID`, `Recover`, `Timeout`, `CORS`, `BodyLimit`, `Metrics`, `RateLimit`, `APIKey`, `BearerAPIKey` |
+| `health` | `Service.Register(name, fn)`, `Service.Drain(ctx, delay)`, `Handler.Live`, `Handler.Ready` |
 | `httpserver` | `New(handler, logger, opts...)`: serves any `http.Handler` with graceful shutdown |
 | `job` | `Every(name, interval, fn, opts...)`: periodic background work, run and stopped by `lifecycle` |
 | `lifecycle` | `New(opts...).Run(ctx)`: runs servers and hooks, stops on SIGINT/SIGTERM |

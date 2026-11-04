@@ -313,6 +313,8 @@ func TestRuntimeValidation(t *testing.T) {
 	}{
 		{"non-positive shutdown", map[string]string{envShutdownTimeout: "0s"}, envShutdownTimeout + ": must be positive"},
 		{"non-positive body cap", map[string]string{envMaxRequestBody: "0"}, envMaxRequestBody + ": must be positive"},
+		{"negative drain delay", map[string]string{envDrainDelay: "-1s"}, envDrainDelay + ": must not be negative"},
+		{"non-positive request timeout", map[string]string{envRequestTimeout: "0s"}, envRequestTimeout + ": must be positive"},
 	}
 
 	for _, tt := range tests {

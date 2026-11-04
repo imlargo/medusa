@@ -79,7 +79,10 @@ func registerRoutes(router *gin.Engine, c *Container) {
 	if c.Metrics != nil {
 		router.Use(middleware.Metrics(c.Metrics))
 	}
-	router.Use(middleware.Recover(c.Logger))
+	router.Use(
+		middleware.Recover(c.Logger),
+		middleware.Timeout(c.Config.Runtime.RequestTimeout),
+	)
 
 	if c.Metrics != nil {
 		// Scraped from this container's own registry, not the global default.

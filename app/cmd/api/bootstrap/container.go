@@ -321,6 +321,17 @@ func (c *Container) buildHandlers() *Handlers {
 	}
 }
 
+// LeaveRotation makes /ready answer 503 and waits the configured drain
+// delay, so the load balancer stops routing here before the server closes its
+// listener. It is the first shutdown hook.
+func (c *Container) LeaveRotation(ctx context.Context) error {
+	delay := c.Config.Runtime.DrainDelay
+	if delay > 0 {
+		c.Logger.Info("leaving rotation", slog.Duration("delay", delay))
+	}
+	return c.HealthService.Drain(ctx, delay)
+}
+
 // DrainEventStreams ends every open SSE session.
 //
 // It has to run before the HTTP server shuts down, which is why it is wired as

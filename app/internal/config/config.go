@@ -94,6 +94,16 @@ type RuntimeConfig struct {
 	// ShutdownTimeout is the budget for draining in-flight work on shutdown.
 	ShutdownTimeout time.Duration
 
+	// DrainDelay is how long /ready answers 503 before the shutdown starts, so
+	// the load balancer stops routing here first. Zero, the default, skips the
+	// wait; behind Kubernetes, a few probe periods (5s) is typical. It comes on
+	// top of ShutdownTimeout.
+	DrainDelay time.Duration
+
+	// RequestTimeout is the deadline on every request's context, except event
+	// streams.
+	RequestTimeout time.Duration
+
 	// MaxRequestBody caps an accepted request body, in bytes.
 	MaxRequestBody int64
 
@@ -198,6 +208,8 @@ func Load() (*Config, error) {
 		Environment: environment,
 		Runtime: RuntimeConfig{
 			ShutdownTimeout: l.duration(envShutdownTimeout, defaultShutdownTimeout),
+			DrainDelay:      l.duration(envDrainDelay, 0),
+			RequestTimeout:  l.duration(envRequestTimeout, defaultRequestTimeout),
 			MaxRequestBody:  int64(l.integer(envMaxRequestBody, defaultMaxRequestBody)),
 			DocsEnabled:     l.boolean(envDocsEnabled, !environment.IsProduction()),
 		},
@@ -289,6 +301,14 @@ func (c *Config) Validate() error {
 
 	if c.Runtime.ShutdownTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("%s: must be positive, got %s", envShutdownTimeout, c.Runtime.ShutdownTimeout))
+	}
+
+	if c.Runtime.DrainDelay < 0 {
+		errs = append(errs, fmt.Errorf("%s: must not be negative, got %s", envDrainDelay, c.Runtime.DrainDelay))
+	}
+
+	if c.Runtime.RequestTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("%s: must be positive, got %s", envRequestTimeout, c.Runtime.RequestTimeout))
 	}
 
 	if c.Runtime.MaxRequestBody <= 0 {

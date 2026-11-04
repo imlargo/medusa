@@ -90,8 +90,9 @@ Middleware runs in this order:
 | 4 | `middleware.BodyLimit` | all | Bodies over `MAX_REQUEST_BODY_BYTES` fail with 413 |
 | 5 | `middleware.Metrics` | all, when enabled | Count and duration per route template |
 | 6 | `middleware.Recover` | all | A panic is logged with its stack and answered as a `server.internal` problem; the access log and metrics above it record a 500 |
-| 7 | `middleware.RateLimit` | `/v1` | 429 over quota; credential endpoints get a tighter rule |
-| 8 | `auth.Middleware` | protected `/v1` routes | Valid bearer token (signature, expiry, issuer) required; stores the user ID |
+| 7 | `middleware.Timeout` | all but event streams | The request's context gets a `REQUEST_TIMEOUT` deadline; work past it answers 503 `server.timeout` |
+| 8 | `middleware.RateLimit` | `/v1` | 429 over quota; credential endpoints get a tighter rule |
+| 9 | `auth.Middleware` | protected `/v1` routes | Valid bearer token (signature, expiry, issuer) required; stores the user ID |
 
 Routes outside `/v1` are deliberately free of auth and rate limiting:
 
@@ -168,7 +169,11 @@ Periodic work runs inside the process as a `job.Every`, registered with `lifecyc
 
 ## Shutdown
 
-On SIGTERM, `lifecycle` runs this sequence within `SHUTDOWN_TIMEOUT` (10 s by default):
+On SIGTERM, `lifecycle` runs this sequence:
+
+0. **Leave rotation.** `/ready` answers 503 with `"draining": true` for `SHUTDOWN_DRAIN_DELAY` (0 by default, so no wait), while the server keeps serving. This lets the load balancer stop routing here before the listener closes. It comes before the budget below, so the orchestrator's grace period has to cover both.
+
+Then, within `SHUTDOWN_TIMEOUT` (10 s by default):
 
 1. **Drain SSE streams.** One third of the budget. Without this step, the HTTP server would wait on streams that never finish.
 2. **Stop the servers.** The HTTP server gets the remaining two thirds: in-flight requests finish and new ones are refused. Jobs registered with `lifecycle` are canceled and waited for at the same step.
