@@ -85,14 +85,15 @@ Middleware runs in this order:
 | Order | Middleware | Scope | Effect |
 |---|---|---|---|
 | 1 | access log | all | One slog line per request, level by status |
-| 2 | `middleware.RequestID` | all | Reuses a client `X-Request-ID` only if it is a valid UUID, otherwise generates one; echoed in the response and the body |
-| 3 | `middleware.CORS` | all | Configured origins plus the server's own URL |
-| 4 | `middleware.BodyLimit` | all | Bodies over `MAX_REQUEST_BODY_BYTES` fail with 413 |
-| 5 | `middleware.Metrics` | all, when enabled | Count and duration per route template |
-| 6 | `middleware.Recover` | all | A panic is logged with its stack and answered as a `server.internal` problem; the access log and metrics above it record a 500 |
-| 7 | `middleware.Timeout` | all but event streams | The request's context gets a `REQUEST_TIMEOUT` deadline; work past it answers 503 `server.timeout` |
-| 8 | `middleware.RateLimit` | `/v1` | 429 over quota; credential endpoints get a tighter rule |
-| 9 | `auth.Middleware` | protected `/v1` routes | Valid bearer token (signature, expiry, issuer) required; stores the user ID |
+| 2 | `middleware.RequestID` | all | Reuses a client `X-Request-ID` only if it is a valid UUID, otherwise generates one; echoed in the response and the body, and carried in the request's context so every log line written with it has `request_id` (`medusa.LogHandler`) |
+| 3 | `middleware.SecureHeaders` | all | `X-Content-Type-Options: nosniff` and `Content-Security-Policy: frame-ancestors 'none'` |
+| 4 | `middleware.CORS` | all | Configured origins plus the server's own URL |
+| 5 | `middleware.BodyLimit` | all | Bodies over `MAX_REQUEST_BODY_BYTES` fail with 413 |
+| 6 | `middleware.Metrics` | all, when enabled | Count and duration per route template |
+| 7 | `middleware.Recover` | all | A panic is logged with its stack and answered as a `server.internal` problem; the access log and metrics above it record a 500 |
+| 8 | `middleware.Timeout` | all but event streams | The request's context gets a `REQUEST_TIMEOUT` deadline; work past it answers 503 `server.timeout` |
+| 9 | `middleware.RateLimit` | `/v1` | 429 over quota; credential endpoints get a tighter rule |
+| 10 | `auth.Middleware` | protected `/v1` routes | Valid bearer token (signature, expiry, issuer) required; stores the user ID |
 
 Routes outside `/v1` are deliberately free of auth and rate limiting:
 

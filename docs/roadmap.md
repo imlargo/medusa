@@ -65,9 +65,9 @@ Each item has an ID for its issue, a size (S: under a day, M: days, L: a week or
 | 1.3 | **Server timeouts**: read, write and idle defaults in `httpserver`; long routes extend their own deadline | M | | Done |
 | 1.4 | **Error code catalog**: a test that finds every declared `apperr` error, fails on duplicate codes, and generates `docs/errors.md`. It later feeds the error responses in the OpenAPI spec (2.1). | M | | |
 | 1.5 | **The caller in `context.Context`**: `auth` puts a `Principal` (subject, scopes, method) in the request context, so services and jobs see who acts, and `auth.Require(scopes...)` guards routes. Casbin, OpenFGA or Cerbos stay recipes, not batteries. | M | | |
-| 1.6 | **Shutdown that drains**: on SIGTERM `/ready` answers 503 and the server waits a configurable delay before closing the listener, so the load balancer stops sending first. | S | | |
-| 1.7 | **Request deadline** middleware: every request's context gets a deadline, and an expired one is `server.timeout` (503). | S | | |
-| 1.8 | **Headers**: CORS allows `X-Request-ID` and `X-API-Key` and exposes `X-Request-ID`, `Retry-After` and the rate-limit headers; `X-Content-Type-Options: nosniff` on every response; `http.CrossOriginProtection` when auth uses cookies. | S | | CORS done |
+| 1.6 | **Shutdown that drains**: on SIGTERM `/ready` answers 503 and the server waits a configurable delay before closing the listener, so the load balancer stops sending first. | S | | Done (`SHUTDOWN_DRAIN_DELAY`) |
+| 1.7 | **Request deadline** middleware: every request's context gets a deadline, and an expired one is `server.timeout` (503). | S | | Done (`REQUEST_TIMEOUT`) |
+| 1.8 | **Headers**: CORS allows `X-Request-ID` and `X-API-Key` and exposes `X-Request-ID`, `Retry-After` and the rate-limit headers; `X-Content-Type-Options: nosniff` on every response; `http.CrossOriginProtection` when auth uses cookies. | S | | Done but `CrossOriginProtection`, which waits for cookie sessions (2.3) |
 
 ### Phase 2: Batteries
 
@@ -106,7 +106,7 @@ From "a set of packages" to "an app in 30 lines of `main`".
 | ID | Item | Size | Depends on |
 |---|---|---|---|
 | 3.1 | **Kit**: `medusa.New(...)` wires the slog logger, the HTTP server, health, metrics, the access log, recovery and shutdown by default, with options to replace each. Needs D4. | L | 2.2 |
-| 3.2 | **Request-scoped logging**: a slog handler that adds `request_id` (and `trace_id`) to every line logged with the request's context | S | |
+| 3.2 | **Request-scoped logging**: a slog handler that adds `request_id` (and `trace_id`) to every line logged with the request's context. Done for `request_id` (`medusa.LogHandler`); `trace_id` comes with 3.3 | S | |
 | 3.3 | **`otel` battery**: tracing for Gin, pgx, River and `httpclient`; exemplars on the Prometheus metrics | L | 2.6 |
 | 3.4 | **Admin listener**: pprof, `/metrics` and the probes on a separate port | M | 3.1 |
 

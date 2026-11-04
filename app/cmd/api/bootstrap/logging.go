@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/imlargo/medusa"
 )
 
 // accessLogMiddleware logs one structured entry per request through the
@@ -34,7 +32,6 @@ func accessLogMiddleware(log *slog.Logger) gin.HandlerFunc {
 			slog.Int("status", status),
 			slog.Duration("latency", time.Since(start)),
 			slog.String("ip", c.ClientIP()),
-			slog.String("request_id", c.GetString(medusa.RequestIDKey)),
 		}
 
 		if err := c.Errors.ByType(gin.ErrorTypePrivate).String(); err != "" {

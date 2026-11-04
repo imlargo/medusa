@@ -73,6 +73,7 @@ func ginMode(c *Container) string {
 func registerRoutes(router *gin.Engine, c *Container) {
 	router.Use(
 		middleware.RequestID(),
+		middleware.SecureHeaders(),
 		middleware.CORS(allowedOrigins(c)),
 		middleware.BodyLimit(c.Config.Runtime.MaxRequestBody),
 	)

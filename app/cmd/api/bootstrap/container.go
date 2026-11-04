@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/imlargo/medusa"
 	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/health"
 	"github.com/imlargo/medusa/metrics"
@@ -113,9 +114,10 @@ func MinimalOptions() Options {
 	return Options{}
 }
 
-// newLogger is the process logger: JSON on stderr, info and above.
+// newLogger is the process logger: JSON on stderr, info and above, with the
+// request ID on every line logged with a request's context.
 func newLogger() *slog.Logger {
-	return slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	return slog.New(medusa.LogHandler(slog.NewJSONHandler(os.Stderr, nil)))
 }
 
 // NewContainer wires all dependencies. On failure it closes whatever was
