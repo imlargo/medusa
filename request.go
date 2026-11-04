@@ -21,7 +21,7 @@ import (
 // Bind binds and validates the request body to the given struct.
 func (c *Context) Bind(obj any) error {
 	if err := c.ShouldBindJSON(obj); err != nil {
-		return c.formatValidationError(err)
+		return bindError(err, obj, "json", ErrMalformedBody)
 	}
 	return nil
 }
@@ -29,7 +29,7 @@ func (c *Context) Bind(obj any) error {
 // BindQuery binds and validates query parameters.
 func (c *Context) BindQuery(obj any) error {
 	if err := c.ShouldBindQuery(obj); err != nil {
-		return c.formatValidationError(err)
+		return bindError(err, obj, "form", ErrInvalidParameter)
 	}
 	return nil
 }
@@ -37,7 +37,7 @@ func (c *Context) BindQuery(obj any) error {
 // BindURI binds and validates URI parameters.
 func (c *Context) BindURI(obj any) error {
 	if err := c.ShouldBindUri(obj); err != nil {
-		return c.formatValidationError(err)
+		return bindError(err, obj, "uri", ErrInvalidParameter)
 	}
 	return nil
 }
@@ -46,10 +46,10 @@ func (c *Context) BindURI(obj any) error {
 // Validation error formatting
 // ---------------------------------------------------------------------------
 
-// formatValidationError turns a binding failure into a client-facing error:
-// ErrValidation listing each rejected field, or ErrMalformedBody when the
-// payload could not be parsed at all.
-func (c *Context) formatValidationError(err error) error {
+// bindError turns a binding failure into a client-facing error: ErrValidation
+// listing each rejected field by the name the client sent (its tag in obj),
+// or unparsable when the input could not be decoded at all.
+func bindError(err error, obj any, tag string, unparsable *apperr.Error) error {
 	// A body cut off by the size cap is not a validation problem, and reporting
 	// it as one sends the client hunting for a field that is fine.
 	if tooLarge, ok := errors.AsType[*http.MaxBytesError](err); ok {
@@ -60,7 +60,7 @@ func (c *Context) formatValidationError(err error) error {
 		fields := make([]apperr.FieldError, 0, len(validationErrors))
 		for _, fieldErr := range validationErrors {
 			fields = append(fields, apperr.FieldError{
-				Field:   strings.ToLower(fieldErr.Field()),
+				Field:   fieldPath(reflect.TypeOf(obj), fieldErr.StructNamespace(), tag),
 				Message: formatValidationMessage(fieldErr),
 			})
 		}
@@ -68,7 +68,42 @@ func (c *Context) formatValidationError(err error) error {
 		return ErrValidation.WithFields(fields...)
 	}
 
-	return ErrMalformedBody.WithCause(err)
+	return unparsable.WithCause(err)
+}
+
+// fieldPath turns a validator namespace such as "Order.Items[0].UnitPrice"
+// into the path the client wrote, "items[0].unit_price", by reading each
+// field's tag in t. A field without the tag keeps its Go name.
+func fieldPath(t reflect.Type, namespace, tag string) string {
+	segments := strings.Split(namespace, ".")[1:] // the first one is the type name
+	path := make([]string, 0, len(segments))
+
+	for _, segment := range segments {
+		name, index, _ := strings.Cut(segment, "[")
+		if index != "" {
+			index = "[" + index
+		}
+
+		for t != nil && (t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map) {
+			t = t.Elem()
+		}
+
+		label := name
+		if t != nil && t.Kind() == reflect.Struct {
+			if field, ok := t.FieldByName(name); ok {
+				if tagged, _, _ := strings.Cut(field.Tag.Get(tag), ","); tagged != "" && tagged != "-" {
+					label = tagged
+				}
+				t = field.Type
+			} else {
+				t = nil
+			}
+		}
+
+		path = append(path, label+index)
+	}
+
+	return strings.Join(path, ".")
 }
 
 func formatValidationMessage(e validator.FieldError) string {

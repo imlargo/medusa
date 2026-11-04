@@ -204,3 +204,61 @@ func TestHandlerLeavesASuccessfulResponseAlone(t *testing.T) {
 		t.Errorf("body = %v, want the handler's own payload", body)
 	}
 }
+
+type order struct {
+	Items []orderItem `json:"items" binding:"required,dive"`
+}
+
+type orderItem struct {
+	UnitPrice int `json:"unit_price" binding:"min=1"`
+}
+
+// Clients know their fields by the names they sent, not by the Go names, and
+// a field inside a list needs its index to be found.
+func TestValidationErrorsNameFieldsAsTheClientSentThem(t *testing.T) {
+	_, body := call(t, http.MethodPost, "/x", `{"items":[{"unit_price":5},{"unit_price":0}]}`,
+		medusa.Handle(func(ctx *medusa.Context, in *order) (*greeted, error) {
+			return &greeted{}, nil
+		}))
+
+	fields, _ := body["errors"].([]any)
+	if len(fields) != 1 {
+		t.Fatalf("errors = %v, want one field error", body["errors"])
+	}
+	field, _ := fields[0].(map[string]any)
+	if field["field"] != "items[1].unit_price" {
+		t.Errorf("field = %v, want items[1].unit_price", field["field"])
+	}
+}
+
+func TestPaginationFieldsAreNamedByTheirQueryParameter(t *testing.T) {
+	_, body := call(t, http.MethodGet, "/x?page_size=-1", "", func(c *gin.Context) {
+		if _, err := medusa.NewContext(c).Pagination(); err != nil {
+			medusa.WriteError(c, err)
+		}
+	})
+
+	fields, _ := body["errors"].([]any)
+	if len(fields) != 1 {
+		t.Fatalf("errors = %v, want one field error", body["errors"])
+	}
+	if field, _ := fields[0].(map[string]any); field["field"] != "page_size" {
+		t.Errorf("field = %v, want page_size", field["field"])
+	}
+}
+
+// A query parameter that does not parse is a bad parameter, not a bad body.
+func TestUnparsableQueryIsAnInvalidParameter(t *testing.T) {
+	status, body := call(t, http.MethodGet, "/x?page_size=abc", "", func(c *gin.Context) {
+		if _, err := medusa.NewContext(c).Pagination(); err != nil {
+			medusa.WriteError(c, err)
+		}
+	})
+
+	if status != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", status, http.StatusBadRequest)
+	}
+	if body["code"] != medusa.ErrInvalidParameter.Code() {
+		t.Errorf("code = %v, want %q", body["code"], medusa.ErrInvalidParameter.Code())
+	}
+}

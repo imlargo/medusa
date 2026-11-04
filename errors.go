@@ -8,16 +8,16 @@ var (
 	// ErrMalformedBody: the body is not JSON of the expected shape.
 	ErrMalformedBody = apperr.Invalid("request.malformed_body", "the request body could not be parsed")
 
-	// ErrValidation: the body parsed but some fields are invalid; the error
-	// lists them.
+	// ErrValidation: the input parsed but some fields are invalid; the error
+	// lists them by the names the client sent.
 	ErrValidation = apperr.Invalid("request.validation_failed", "some fields are invalid")
 
 	// ErrBodyTooLarge: the body is over the limit set by middleware.BodyLimit.
 	// The limit is in the max_bytes metadata.
 	ErrBodyTooLarge = apperr.New(apperr.KindTooLarge, "request.body_too_large", "the request body is too large")
 
-	// ErrInvalidParameter: a URL parameter is missing or malformed; the error
-	// names it.
+	// ErrInvalidParameter: a path or query parameter is missing or does not
+	// parse. The error names it when the parameter is known.
 	ErrInvalidParameter = apperr.Invalid("request.invalid_parameter", "a URL parameter is invalid")
 
 	// ErrMissingCredentials: the Authorization header is missing.
