@@ -14,7 +14,6 @@ Built on branch `refactor/separate-medusa-20261101`, not merged:
 - Errors as declared `apperr` values, RFC 9457 responses, app by feature (ADR 0003).
 - CI (`.github/workflows/ci.yml`) checks every module on its own: tidy, vet, `go test -race -shuffle=on` against a real Postgres with the database tests required, golangci-lint v2, govulncheck, and the Docker build.
 
-Never run: the end-to-end flows against a real database (0.4).
 
 ### Is it a base for large APIs?
 
@@ -52,9 +51,9 @@ Each item has an ID for its issue, a size (S: under a day, M: days, L: a week or
 | 0.1 | **CI** for every module: tidy, vet, `-race -shuffle`, Postgres with `REQUIRE_DB_TESTS=1`, govulncheck, Docker build | M | | Done |
 | 0.2 | **golangci-lint v2** with `.golangci.yml`, code at zero findings | M | 0.1 | Done |
 | 0.3 | **Vulnerable dependencies**: quic-go, aws s3 and eventstream (Dependabot), x/net 0.60.0 and the Go 1.27.3 toolchain (govulncheck) | S | 0.1 | Done |
-| 0.4 | **Adoption check on a real database**: `cmd/migrate` against a copy of a database GORM created, then register, login, me and SSE end to end | S | 0.1 | |
-| 0.5 | **PR and merge**, with the breaking changes listed for API clients: the error format (ADR 0003) and the token format (`sub`, `iss`; everyone signs in again once). Needs D5. | S | 0.4 | |
-| 0.6 | **First releases**: `CHANGELOG.md`, tag the core `v0.1.0`, then drop the `replace` in `auth/go.mod` and tag `postgres/v0.1.0` and `auth/v0.1.0` | S | 0.5 | |
+| 0.4 | **End to end on a real database**: register, login and the signed-in user through the router and middleware, against Postgres in CI (`TestAccountFlow`). There is no deployed database to check, so the GORM copy is moot | S | 0.1 | Done |
+| 0.5 | **PR and merge**, with the breaking changes listed for API clients: the error format (ADR 0003) and the token format (`sub`, `iss`; everyone signs in again once). No clients run it (D5), so no migration window. | S | | Done |
+| 0.6 | **First releases**: a `CHANGELOG.md` per module, `release.yml`, the core and every battery at `v0.1.0`, `auth` on the released core | S | 0.5 | Done |
 
 ### Phase 1: Security and contract gaps
 
@@ -158,7 +157,7 @@ These are imlargo's to make. Each blocks the item next to it, and nothing else.
 | D2 | Password policy | NIST SP 800-63B-4 (check its SHALL/SHOULD wording first): a long minimum, a maximum of at least 64, no composition rules, a blocklist of breached passwords | 1.2, 2.3 |
 | D3 | OpenAPI: Huma, oapi-codegen or swag v2 | Huma through `humagin`, behind the `api` battery | 2.1 |
 | D4 | Where the kit lives: the core module, or its own module | | 3.1 |
-| D5 | Is the app deployed with real clients? It decides whether 0.5 needs a migration window | | 0.5 |
+| D5 | Is the app deployed with real clients? | Decided: no. The app is the example built on Medusa, never deployed | 0.5 |
 | D6 | Auth scope: which logins Medusa ships (password, OIDC providers, passkeys) and when an app must use an external IdP instead | Password and OIDC in v1, passkeys next; IdP for SSO and shared logins | 2.3 |
 | D7 | River as a dependency for the `queue` battery (MPL-2.0, Postgres only) | Yes | 2.4 |
 
