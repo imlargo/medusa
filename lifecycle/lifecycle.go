@@ -149,6 +149,9 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	}
 
+	// A server whose Start had not yet registered when Stop ran ignored the
+	// Stop; canceling its context is what still makes Start return.
+	cancel()
 	wg.Wait()
 
 	// Drain whatever the other servers reported while shutting down.

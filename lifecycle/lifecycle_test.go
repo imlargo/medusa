@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -178,5 +180,41 @@ func TestRunCollectsStopErrors(t *testing.T) {
 
 	if err := app.Run(ctx); !errors.Is(err, boom) {
 		t.Errorf("Run() = %v, want it to wrap %v", err, boom)
+	}
+}
+
+// lateServer missed its Stop: Stop ran before Start had anything to stop,
+// which is what happens to httpserver when a signal arrives right at startup.
+type lateServer struct{ started chan struct{} }
+
+func (s *lateServer) Start(ctx context.Context) error {
+	close(s.started)
+	<-ctx.Done()
+	return nil
+}
+
+func (s *lateServer) Stop(context.Context) error { return nil }
+
+func TestRunReturnsOnASignalEvenIfAServerMissedItsStop(t *testing.T) {
+	srv := &lateServer{started: make(chan struct{})}
+	app := New(WithServer(srv), WithLogger(quietLogger(t)))
+
+	done := make(chan error, 1)
+	go func() { done <- app.Run(context.Background()) }()
+
+	<-srv.started
+	// Run registers for signals right after starting the servers.
+	time.Sleep(50 * time.Millisecond)
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatalf("send SIGTERM: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run() = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after SIGTERM")
 	}
 }
