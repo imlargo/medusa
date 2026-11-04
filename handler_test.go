@@ -262,3 +262,31 @@ func TestUnparsableQueryIsAnInvalidParameter(t *testing.T) {
 		t.Errorf("code = %v, want %q", body["code"], medusa.ErrInvalidParameter.Code())
 	}
 }
+
+// sort_by usually lands in an ORDER BY, so a field nobody allowed must never
+// pass through, even when the caller forgot the allow list.
+func TestSortAcceptsOnlyAllowedFields(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		allowed []string
+		want    string
+	}{
+		{"allowed field", "sort_by=name", []string{"name", "created_at"}, "name"},
+		{"unknown field", "sort_by=password", []string{"name", "created_at"}, "created_at"},
+		{"no allow list", "sort_by=password;drop", nil, "created_at"},
+		{"default not allowed", "", []string{"name"}, "name"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got medusa.SortParams
+			call(t, http.MethodGet, "/x?"+tt.query, "", func(c *gin.Context) {
+				got = medusa.NewContext(c).Sort("created_at", medusa.SortOrderDesc, tt.allowed...)
+			})
+			if got.Field != tt.want {
+				t.Errorf("Sort().Field = %q, want %q", got.Field, tt.want)
+			}
+		})
+	}
+}

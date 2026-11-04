@@ -394,21 +394,24 @@ type SortParams struct {
 	Order SortOrder
 }
 
-// Sort extracts sorting parameters from the query string.
-// allowedFields is a whitelist of column names the caller permits. Any
-// sort_by value not in the set falls back to defaultField.
-// If allowedFields is non-empty, defaultField must itself be in the list —
-// if it is not, the first allowed field is used as the fallback instead.
+// Sort extracts sorting parameters from the query string. The field usually
+// ends up in an ORDER BY, so only names in allowedFields are accepted; any
+// other sort_by falls back to defaultField. With no allowedFields, only
+// defaultField is. A defaultField missing from allowedFields is replaced by
+// the first allowed field.
 //
 // Example: ?sort_by=created_at&sort_order=desc
 func (c *Context) Sort(defaultField string, defaultOrder SortOrder, allowedFields ...string) SortParams {
-	// Resolve a safe default: if the caller's default is not in the whitelist,
-	// fall back to the first allowed field to avoid silently using an invalid column.
-	safeDefault := resolveDefault(defaultField, allowedFields)
+	if len(allowedFields) == 0 {
+		allowedFields = []string{defaultField}
+	}
 
 	field := c.Query("sort_by")
-	if !isAllowedField(field, allowedFields) {
-		field = safeDefault
+	if !slices.Contains(allowedFields, field) {
+		field = defaultField
+		if !slices.Contains(allowedFields, field) {
+			field = allowedFields[0]
+		}
 	}
 
 	order := SortOrder(c.Query("sort_order"))
@@ -420,38 +423,4 @@ func (c *Context) Sort(defaultField string, defaultOrder SortOrder, allowedField
 		Field: field,
 		Order: order,
 	}
-}
-
-// resolveDefault guarantees the returned default is safe to use.
-// If allowed is empty the original default passes through (no whitelist = no
-// restriction, caller's responsibility). When a whitelist exists, default must
-// appear in it; otherwise we fall back to allowed[0].
-func resolveDefault(defaultField string, allowed []string) string {
-	if len(allowed) == 0 {
-		return defaultField
-	}
-	for _, a := range allowed {
-		if a == defaultField {
-			return defaultField
-		}
-	}
-	return allowed[0]
-}
-
-// isAllowedField reports whether candidate is a permitted sort field.
-// An empty or nil whitelist means no restriction (any non-empty value passes).
-// When a whitelist is provided, candidate must be present in it.
-func isAllowedField(candidate string, allowed []string) bool {
-	if candidate == "" {
-		return false
-	}
-	if len(allowed) == 0 {
-		return true
-	}
-	for _, a := range allowed {
-		if candidate == a {
-			return true
-		}
-	}
-	return false
 }
