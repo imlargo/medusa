@@ -18,7 +18,7 @@ import (
 var ErrInvalidAPIKey = apperr.Unauthenticated("auth.invalid_api_key", "invalid API key")
 
 // apiKeyHeader carries the key APIKey checks.
-const apiKeyHeader = "X-API-Key"
+const apiKeyHeader = "X-API-Key" //nolint:gosec // G101: a header name, not a credential
 
 // APIKey rejects requests whose X-API-Key header does not match key.
 func APIKey(key string) gin.HandlerFunc {
