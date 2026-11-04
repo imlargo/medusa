@@ -136,6 +136,11 @@ err := s.store.WithTx(ctx, func(tx *store.Store) error {
 
 Returning an error, or panicking, rolls everything back. A `WithTx` inside another is a savepoint.
 
+`store` imports every feature that owns a repository, so those features can never import `store` back: Go rejects the cycle. Two cases follow:
+
+- **Several tables of one feature** (an order and its items): the transaction lives in that feature's repository. It takes a `postgres.Conn`, and opens the transaction with `pgx.BeginFunc(ctx, conn, ...)` over `sqlc.New(tx)`.
+- **Several features** (create a user and their workspace): the use case lives in a feature without a repository of its own, the way `account` builds on `user`, and that feature calls `store.WithTx`.
+
 ### Add a background job
 
 1. The work as a method `func(ctx context.Context) error` on a service. It must return when `ctx` is canceled.
