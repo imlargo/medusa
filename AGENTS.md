@@ -55,7 +55,7 @@ Batteries:
 | Module | Holds |
 |---|---|
 | `postgres` | `Open(ctx, url, logger, opts...)`, `Migrate(ctx, url, migrations, logger)`, `Conn`, `IsNoRows`, `IsUniqueViolation` |
-| `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test |
+| `postgres/pgtest` | `New(t, migrations)`: a fresh database per test, cloned from a template migrated once per set of migrations |
 | `auth` | `NewJWT[S](secret, WithIssuer(...))`, `Sign`, `Parse`, `Middleware(j)`, `SubjectFrom[S](ctx)` |
 | `storage` | S3/R2 object storage: `NewFileStorage`, key validation, bulk delete |
 | `env` | `LoadDotEnv()`, `New()`: typed getters (`Required`, `Int`, `Duration`, `List`...) that collect every problem into `Err()` |
