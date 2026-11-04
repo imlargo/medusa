@@ -9,6 +9,7 @@ require (
 	github.com/imlargo/medusa v0.0.0
 	github.com/imlargo/medusa/auth v0.0.0
 	github.com/imlargo/medusa/postgres v0.0.0
+	github.com/imlargo/medusa/storage v0.0.0
 	github.com/imlargo/ratelimit v0.1.1
 	github.com/imlargo/ratelimit/metrics/prometheus v0.1.1
 	github.com/imlargo/sse v0.1.0
@@ -107,4 +108,5 @@ replace (
 	github.com/imlargo/medusa => ../
 	github.com/imlargo/medusa/auth => ../auth
 	github.com/imlargo/medusa/postgres => ../postgres
+	github.com/imlargo/medusa/storage => ../storage
 )

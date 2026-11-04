@@ -9,9 +9,9 @@ There are two things in this repo, Medusa and an app built on it, and the whole 
 | | Medusa core | Medusa batteries | The app |
 |---|---|---|---|
 | What | A toolkit for HTTP APIs on Gin | Ready-made pieces most APIs need, opt-in | One concrete API built on Medusa |
-| Where | Repository root (`/`) | `postgres/`, `auth/` | `app/` |
+| Where | Repository root (`/`) | `postgres/`, `auth/`, `storage/` | `app/` |
 | Module | `github.com/imlargo/medusa` | `github.com/imlargo/medusa/<battery>`, one each | `github.com/imlargo/medusa/app` |
-| Knows about | HTTP, errors, lifecycle, health, metrics, storage | One integration each (pgx + goose, golang-jwt) | Users, its schema, Redis, config, routes |
+| Knows about | HTTP, errors, lifecycle, health, metrics | One integration each (pgx + goose, golang-jwt, the AWS SDK) | Users, its schema, Redis, config, routes |
 | Imports | Never a battery or the app | The core at most, never the app | Medusa, through its public packages only |
 
 The direction is one way: **app -> batteries -> core**. If a change to Medusa needs an app type, the change belongs in the app.
@@ -49,7 +49,6 @@ Core:
 | `job` | `Every(name, interval, fn, opts...)`: periodic background work, run and stopped by `lifecycle` |
 | `lifecycle` | `New(opts...).Run(ctx)`: runs servers and hooks, stops on SIGINT/SIGTERM |
 | `metrics` | `NewHTTP(registry)`: Prometheus request metrics |
-| `storage` | S3/R2 object storage |
 
 Batteries:
 
@@ -58,6 +57,7 @@ Batteries:
 | `postgres` | `Open(ctx, url, logger, opts...)`, `Migrate(ctx, url, migrations, logger)`, `Conn`, `IsNoRows`, `IsUniqueViolation` |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test |
 | `auth` | `NewJWT[S](secret, WithIssuer(...))`, `Sign`, `Parse`, `Middleware(j)`, `SubjectFrom[S](ctx)` |
+| `storage` | S3/R2 object storage: `NewFileStorage`, key validation, bulk delete |
 
 ### App map
 
@@ -167,8 +167,8 @@ Then: add it with a test next to it, keep the exported surface small, and run th
 
 | Where | Command | Does |
 |---|---|---|
-| root | `go test ./... ./auth/... ./postgres/... ./app/...` | Tests every module (`./...` alone is only the core) |
-| root | `go vet ./... ./auth/... ./postgres/... ./app/...` | Vets every module |
+| root | `go test ./... ./auth/... ./postgres/... ./storage/... ./app/...` | Tests every module (`./...` alone is only the core) |
+| root | `go vet ./... ./auth/... ./postgres/... ./storage/... ./app/...` | Vets every module |
 | `app/` | `TEST_DATABASE_URL=postgres://... go test ./...` | Also runs the database tests (skipped without the URL) |
 | `app/` | `make run` / `make dev` | Runs the API / with hot reload |
 | `app/` | `make migrate` | Applies pending migrations |

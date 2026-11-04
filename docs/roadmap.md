@@ -81,7 +81,7 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 | 2.4 | **`queue` battery on River**: Postgres jobs enqueued in the same transaction as the write that causes them, with retries and a UI. Replaces the custom outbox and covers cluster-once jobs. Needs D7. | M | |
 | 2.5 | **`cache`**: Redis client from a URL, `Get`/`Set`/`Delete`, `Remember` with single flight, health check. The app's `database/redis.go` moves here. | M | |
 | 2.6 | **`httpclient`** (core, standard library only): outbound client with a timeout and `ctx` always, capped bodies, status errors as `apperr`, retries only for idempotent requests. | M | |
-| 2.7 | **`storage` out of the core** into its own battery, so an API without object storage stops downloading the AWS SDK. Breaking for the core. | S | |
+| 2.7 | **`storage` out of the core** into its own battery, so an API without object storage stops downloading the AWS SDK. Breaking for the core. Done. | S | |
 | 2.8 | **Test kit**: `pgtest` starts a Postgres container (testcontainers-go) when `TEST_DATABASE_URL` is empty, and clones a migrated template database instead of migrating per test. Migrations take goose's session lock. | M | |
 | 2.9 | **`webhook`**: signed delivery out and verification in, on the Standard Webhooks spec, delivered as `queue` jobs. | M | 2.4 |
 | 2.10 | **`mail`**: a `Sender` interface, SMTP (wneessen/go-mail) and a development sender that logs, sent as `queue` jobs. | S | 2.4 |

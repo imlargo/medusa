@@ -17,13 +17,12 @@ Requires Go 1.27. Medusa is pre-1.0, so minor versions may break the API; `v0.0.
 | `medusa` | `Context` (extends `*gin.Context`), `Handle*` adapters for handlers that return `(result, error)`, response writers | yes |
 | `apperr` | Application errors independent of the transport: a kind, a stable `domain.rule` code, a client-safe message, invalid fields, and a cause that never reaches the client | no |
 | `httperr` | Reports application errors over HTTP: kind to status, RFC 9457 problem details (`application/problem+json`) | no |
-| `middleware` | Request ID, CORS, body limit, Prometheus metrics, rate limiting, API keys | yes |
+| `middleware` | Request ID, secure headers, panic recovery, request deadline, CORS, body limit, Prometheus metrics, rate limiting, API keys | yes |
 | `health` | Readiness checks as plain functions, plus `/health` and `/ready` handlers | handlers only |
 | `httpserver` | Serves any `http.Handler` with timeouts and graceful shutdown | no |
 | `lifecycle` | Runs servers, start and stop hooks, and shuts down on SIGINT/SIGTERM | no |
 | `job` | Periodic background work managed by `lifecycle`: no overlapping runs, panics contained, cancelled and awaited on shutdown | no |
 | `metrics` | HTTP request counters and histograms in Prometheus | no |
-| `storage` | S3-compatible object storage (Cloudflare R2), with key validation and bulk delete | no |
 
 ## Batteries
 
@@ -34,6 +33,7 @@ Each is its own module, with its own dependencies and versions. Choosing one is 
 | `postgres` | `Open` (pool, ping, slow query log), `Migrate` (goose over any `fs.FS`), `Conn` (pool or transaction), `IsNoRows`, `IsUniqueViolation` | pgx v5, goose |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test on `TEST_DATABASE_URL` | (same module) |
 | `auth` | `JWT[S]` with a typed subject (`int64` or `string`) and optional issuer, `Middleware`, `SubjectFrom[S]` | golang-jwt v5 |
+| `storage` | S3-compatible object storage (Cloudflare R2), with key validation and bulk delete | AWS SDK v2 |
 
 ## Example
 
@@ -76,7 +76,7 @@ The repository holds several modules, tied together by a committed `go.work`:
 - `postgres/` and `auth/` are the batteries, `github.com/imlargo/medusa/postgres` and `github.com/imlargo/medusa/auth`.
 - [`app/`](app/README.md) is an API built on them, `github.com/imlargo/medusa/app`. It is a working application and the starting point for new ones.
 
-From the root, `go test ./... ./auth/... ./postgres/... ./app/...` checks every module against this checkout. `./...` alone stops at the nested modules.
+From the root, `go test ./... ./auth/... ./postgres/... ./storage/... ./app/...` checks every module against this checkout. `./...` alone stops at the nested modules.
 
 Where new code goes, step-by-step recipes and the repo rules are in [AGENTS.md](AGENTS.md). Project status is in [context.md](context.md).
 
