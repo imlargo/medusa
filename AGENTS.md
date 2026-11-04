@@ -170,7 +170,7 @@ Every module (the core and each battery) is versioned and released on its own, w
 
 1. Each change lands with its entry under `[Unreleased]` in that module's `CHANGELOG.md` (`CHANGELOG.md` at the root for the core, `<battery>/CHANGELOG.md` for a battery). It is written for users, and a breaking change leads its line and says how to migrate.
 2. To release, a PR renames `[Unreleased]` to the version with the date and adds a new empty `[Unreleased]` above it, then merges.
-3. Tag the merge commit on `main` with an annotated tag: `v0.2.0` for the core, `<battery>/v0.2.0` for a battery. Push the tags one at a time: GitHub starts no workflow for a push of more than three tags. `release.yml` creates the GitHub release from the changelog section and publishes the version to the Go proxy.
+3. Check that `main`'s head is that merge commit (a tag on the wrong commit is permanent: the Go proxy caches it, and the only fix is a `retract` and a new version). Then tag it with an annotated tag: `v0.2.0` for the core, `<battery>/v0.2.0` for a battery. Push the tags one at a time: GitHub starts no workflow for a push of more than three tags. `release.yml` creates the GitHub release from the changelog section and publishes the version to the Go proxy.
 4. The core goes first. A battery that requires the core (`auth`) then gets a PR raising its `require` to the new core version, and is tagged after that PR merges.
 
 `main` only takes merges from PRs whose `ci` check passed.

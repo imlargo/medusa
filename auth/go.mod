@@ -4,6 +4,10 @@ go 1.27.0
 
 toolchain go1.27.3
 
+// v0.1.0 was tagged before auth required a released core: its go.mod
+// requires github.com/imlargo/medusa v0.0.0, which does not exist.
+retract v0.1.0
+
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
