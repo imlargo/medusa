@@ -8,8 +8,12 @@ import (
 )
 
 // CORS allows browser calls from origins, with credentials, the standard
-// methods and the common request headers. Wildcard origins such as
+// methods and the request headers Medusa reads. Wildcard origins such as
 // "https://*.example.com" are supported.
+//
+// Forwarding headers (X-Forwarded-For...) are not allowed: they are set by
+// proxies, and a page that could send them would be choosing the client IP
+// the rate limiter and the logs see.
 func CORS(origins []string) gin.HandlerFunc {
 	return cors.New(cors.Config{
 		AllowOrigins:  origins,
@@ -29,14 +33,21 @@ func CORS(origins []string) gin.HandlerFunc {
 			"Accept",
 			"Authorization",
 			"Content-Type",
-			"X-Forwarded-For",
-			"X-Real-IP",
-			"X-Forwarded-Host",
-			"X-Forwarded-Proto",
+			requestIDHeader,
+			apiKeyHeader,
 		},
+		// Without these a browser client cannot read the request ID to report
+		// a problem, or the headers that tell it when to retry.
 		ExposeHeaders: []string{
 			"Content-Length",
 			"Content-Type",
+			requestIDHeader,
+			"Retry-After",
+			"RateLimit",
+			"RateLimit-Policy",
+			"X-RateLimit-Limit",
+			"X-RateLimit-Remaining",
+			"X-RateLimit-Reset",
 		},
 	})
 }

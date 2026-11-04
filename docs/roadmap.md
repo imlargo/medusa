@@ -67,7 +67,7 @@ Each item has an ID for its issue, a size (S: under a day, M: days, L: a week or
 | 1.5 | **The caller in `context.Context`**: `auth` puts a `Principal` (subject, scopes, method) in the request context, so services and jobs see who acts, and `auth.Require(scopes...)` guards routes. Casbin, OpenFGA or Cerbos stay recipes, not batteries. | M | | |
 | 1.6 | **Shutdown that drains**: on SIGTERM `/ready` answers 503 and the server waits a configurable delay before closing the listener, so the load balancer stops sending first. | S | | |
 | 1.7 | **Request deadline** middleware: every request's context gets a deadline, and an expired one is `server.timeout` (503). | S | | |
-| 1.8 | **Headers**: CORS allows `X-Request-ID` and `X-API-Key` and exposes `X-Request-ID`, `Retry-After` and the rate-limit headers; `X-Content-Type-Options: nosniff` on every response; `http.CrossOriginProtection` when auth uses cookies. | S | | |
+| 1.8 | **Headers**: CORS allows `X-Request-ID` and `X-API-Key` and exposes `X-Request-ID`, `Retry-After` and the rate-limit headers; `X-Content-Type-Options: nosniff` on every response; `http.CrossOriginProtection` when auth uses cookies. | S | | CORS done |
 
 ### Phase 2: Batteries
 

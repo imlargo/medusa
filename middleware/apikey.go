@@ -17,10 +17,13 @@ import (
 // ErrInvalidAPIKey: the request carries an API key, but not the right one.
 var ErrInvalidAPIKey = apperr.Unauthenticated("auth.invalid_api_key", "invalid API key")
 
+// apiKeyHeader carries the key APIKey checks.
+const apiKeyHeader = "X-API-Key"
+
 // APIKey rejects requests whose X-API-Key header does not match key.
 func APIKey(key string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		got := c.GetHeader("X-API-Key")
+		got := c.GetHeader(apiKeyHeader)
 		if got == "" {
 			medusa.AbortWithError(c, medusa.ErrMissingCredentials)
 			return
