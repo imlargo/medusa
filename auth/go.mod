@@ -7,7 +7,7 @@ toolchain go1.27.3
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/imlargo/medusa v0.0.0
+	github.com/imlargo/medusa v0.1.0
 )
 
 require (
@@ -41,7 +41,3 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
-
-// Developed against the core in this checkout. Released versions require a
-// tagged core instead.
-replace github.com/imlargo/medusa => ../
