@@ -34,6 +34,7 @@ Each is its own module, with its own dependencies and versions. Choosing one is 
 | `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test on `TEST_DATABASE_URL` | (same module) |
 | `auth` | `JWT[S]` with a typed subject (`int64` or `string`) and optional issuer, `Middleware`, `SubjectFrom[S]` | golang-jwt v5 |
 | `storage` | S3-compatible object storage (Cloudflare R2), with key validation and bulk delete | AWS SDK v2 |
+| `env` | Typed environment variables with a `.env` fallback, reporting every problem at once | godotenv |
 
 ## Example
 
@@ -76,7 +77,7 @@ The repository holds several modules, tied together by a committed `go.work`:
 - `postgres/` and `auth/` are the batteries, `github.com/imlargo/medusa/postgres` and `github.com/imlargo/medusa/auth`.
 - [`app/`](app/README.md) is an API built on them, `github.com/imlargo/medusa/app`. It is a working application and the starting point for new ones.
 
-From the root, `go test ./... ./auth/... ./postgres/... ./storage/... ./app/...` checks every module against this checkout. `./...` alone stops at the nested modules.
+From the root, `go test ./... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...` checks every module against this checkout. `./...` alone stops at the nested modules.
 
 Where new code goes, step-by-step recipes and the repo rules are in [AGENTS.md](AGENTS.md). Project status is in [context.md](context.md).
 

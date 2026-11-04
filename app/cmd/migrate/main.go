@@ -29,12 +29,12 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := config.Load()
+	db, err := config.LoadDatabase()
 	if err != nil {
 		return err
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 
-	return postgres.Migrate(ctx, cfg.Database.URL, migrations.FS, logger)
+	return postgres.Migrate(ctx, db.URL, migrations.FS, logger)
 }

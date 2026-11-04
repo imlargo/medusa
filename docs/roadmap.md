@@ -76,7 +76,7 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 | ID | Item | Size | Depends on |
 |---|---|---|---|
 | 2.1 | **`api` battery: typed operations, FastAPI style.** One input struct (path, query, header and body tags) drives binding, validation, OpenAPI 3.1 served at startup, security schemes and the error responses. Built on Huma through its Gin adapter, so Gin stays the router and routes move one at a time; `apperr` renders through Huma's error hook. Replaces swag and `make docs`. Needs D3. | L | 1.4 |
-| 2.2 | **`config`**: env loading with a `.env` fallback, typed getters, one error listing every problem. Extracted from `app/internal/config`. `cmd/migrate` stops needing `JWT_SECRET`. | M | |
+| 2.2 | **`env`** (named so it does not clash with the app's `config`): env loading with a `.env` fallback, typed getters, one error listing every problem. Extracted from `app/internal/config`. `cmd/migrate` stops needing `JWT_SECRET`. Done. | M | |
 | 2.3 | **Auth battery v1**, split so heavy dependencies stay opt-in. Needs D1, D2, D6. `auth/oidc` is its own module. **Never built:** an authorization server or OIDC provider, SAML, SCIM, our own crypto, or a user admin UI. Apps that need SSO or share one login across apps use an IdP (Zitadel, Ory, Keycloak) and only the verifier. | L | 1.5 |
 | 2.4 | **`queue` battery on River**: Postgres jobs enqueued in the same transaction as the write that causes them, with retries and a UI. Replaces the custom outbox and covers cluster-once jobs. Needs D7. | M | |
 | 2.5 | **`cache`**: Redis client from a URL, `Get`/`Set`/`Delete`, `Remember` with single flight, health check. The app's `database/redis.go` moves here. | M | |

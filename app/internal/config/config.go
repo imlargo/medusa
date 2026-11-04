@@ -10,16 +10,12 @@ package config
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/netip"
-	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
-
+	"github.com/imlargo/medusa/env"
 	"github.com/imlargo/medusa/storage"
 )
 
@@ -183,67 +179,82 @@ func (c StorageConfig) Enabled() bool { return c.BucketName != "" }
 // directory is loaded first when present; it never overrides variables already
 // exported in the environment.
 func Load() (*Config, error) {
-	if err := loadDotEnv(); err != nil {
+	if err := env.LoadDotEnv(); err != nil {
 		return nil, err
 	}
 
-	var l loader
+	l := env.New()
 
-	environment := Environment(strings.ToLower(l.text(envAppEnv, string(EnvDevelopment))))
+	environment := Environment(strings.ToLower(l.String(envAppEnv, string(EnvDevelopment))))
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Host: l.text(envHost, defaultHost),
-			Port: l.integer(envPort, defaultPort),
+			Host: l.String(envHost, defaultHost),
+			Port: l.Int(envPort, defaultPort),
 		},
 		Database: DatabaseConfig{
-			URL: l.required(envDatabaseURL),
+			URL: l.Required(envDatabaseURL),
 		},
 		Auth: AuthConfig{
-			JwtSecret:         l.required(envJWTSecret),
-			JwtIssuer:         l.text(envJWTIssuer, defaultJWTIssuer),
-			TokenExpiration:   l.duration(envJWTTokenExpiration, defaultTokenExpiration),
-			RefreshExpiration: l.duration(envJWTRefreshExpiration, defaultRefreshExpiration),
+			JwtSecret:         l.Required(envJWTSecret),
+			JwtIssuer:         l.String(envJWTIssuer, defaultJWTIssuer),
+			TokenExpiration:   l.Duration(envJWTTokenExpiration, defaultTokenExpiration),
+			RefreshExpiration: l.Duration(envJWTRefreshExpiration, defaultRefreshExpiration),
 		},
 		Environment: environment,
 		Runtime: RuntimeConfig{
-			ShutdownTimeout: l.duration(envShutdownTimeout, defaultShutdownTimeout),
-			DrainDelay:      l.duration(envDrainDelay, 0),
-			RequestTimeout:  l.duration(envRequestTimeout, defaultRequestTimeout),
-			MaxRequestBody:  int64(l.integer(envMaxRequestBody, defaultMaxRequestBody)),
-			DocsEnabled:     l.boolean(envDocsEnabled, !environment.IsProduction()),
+			ShutdownTimeout: l.Duration(envShutdownTimeout, defaultShutdownTimeout),
+			DrainDelay:      l.Duration(envDrainDelay, 0),
+			RequestTimeout:  l.Duration(envRequestTimeout, defaultRequestTimeout),
+			MaxRequestBody:  int64(l.Int(envMaxRequestBody, defaultMaxRequestBody)),
+			DocsEnabled:     l.Bool(envDocsEnabled, !environment.IsProduction()),
 		},
 		CORS: CORSConfig{
-			AllowedOrigins: l.list(envCORSAllowedOrigins),
+			AllowedOrigins: l.List(envCORSAllowedOrigins),
 		},
 		RateLimiter: RateLimiterConfig{
-			Enabled:               l.boolean(envRateLimiterEnabled, defaultRateLimiterEnabled),
-			RequestsPerTimeFrame:  l.integer(envRateLimiterRequests, defaultRateLimiterRequests),
-			TimeFrame:             l.duration(envRateLimiterTimeFrame, defaultRateLimiterTimeFrame),
-			AuthRequestsPerMinute: l.integer(envRateLimiterAuthRequests, defaultRateLimiterAuthRequests),
-			TrustedProxies:        l.list(envRateLimiterTrustedProxies),
+			Enabled:               l.Bool(envRateLimiterEnabled, defaultRateLimiterEnabled),
+			RequestsPerTimeFrame:  l.Int(envRateLimiterRequests, defaultRateLimiterRequests),
+			TimeFrame:             l.Duration(envRateLimiterTimeFrame, defaultRateLimiterTimeFrame),
+			AuthRequestsPerMinute: l.Int(envRateLimiterAuthRequests, defaultRateLimiterAuthRequests),
+			TrustedProxies:        l.List(envRateLimiterTrustedProxies),
 		},
 		Redis: RedisConfig{
-			URL: l.text(envRedisURL, ""),
+			URL: l.String(envRedisURL, ""),
 		},
 		Storage: StorageConfig{
-			Provider: storage.Provider(strings.ToLower(l.text(envStorageProvider, string(storage.ProviderR2)))),
+			Provider: storage.Provider(strings.ToLower(l.String(envStorageProvider, string(storage.ProviderR2)))),
 			Config: storage.Config{
-				BucketName:      l.text(envStorageBucketName, ""),
-				AccountID:       l.text(envStorageAccountID, ""),
-				AccessKeyID:     l.text(envStorageAccessKeyID, ""),
-				SecretAccessKey: l.text(envStorageSecretAccessKey, ""),
-				PublicDomain:    l.text(envStoragePublicDomain, ""),
-				UsePublicURL:    l.boolean(envStorageUsePublicURL, false),
+				BucketName:      l.String(envStorageBucketName, ""),
+				AccountID:       l.String(envStorageAccountID, ""),
+				AccessKeyID:     l.String(envStorageAccessKeyID, ""),
+				SecretAccessKey: l.String(envStorageSecretAccessKey, ""),
+				PublicDomain:    l.String(envStoragePublicDomain, ""),
+				UsePublicURL:    l.Bool(envStorageUsePublicURL, false),
 			},
 		},
 	}
 
-	if err := errors.Join(append(l.errs, cfg.Validate())...); err != nil {
+	if err := errors.Join(l.Err(), cfg.Validate()); err != nil {
 		return nil, fmt.Errorf("invalid configuration:\n%w", err)
 	}
 
 	return cfg, nil
+}
+
+// LoadDatabase reads only what migrations need, so the migrate step does not
+// require the API's secrets (JWT_SECRET) to run.
+func LoadDatabase() (DatabaseConfig, error) {
+	if err := env.LoadDotEnv(); err != nil {
+		return DatabaseConfig{}, err
+	}
+
+	l := env.New()
+	db := DatabaseConfig{URL: l.Required(envDatabaseURL)}
+	if err := l.Err(); err != nil {
+		return DatabaseConfig{}, fmt.Errorf("invalid configuration:\n%w", err)
+	}
+	return db, nil
 }
 
 // Validate checks the invariants that survive parsing and returns every
@@ -366,100 +377,4 @@ func (c StorageConfig) validate() error {
 	}
 
 	return errors.Join(errs...)
-}
-
-// loadDotEnv loads a .env file from the working directory when there is one.
-// Variables already set in the environment win. A missing file is the normal
-// case in a container; a malformed one is an error.
-func loadDotEnv() error {
-	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("load .env: %w", err)
-	}
-	return nil
-}
-
-// loader reads typed values from the environment and collects the parse errors
-// so a single Load reports every malformed variable at once.
-type loader struct {
-	errs []error
-}
-
-// text returns the trimmed value of key, or fallback when it is unset or empty.
-func (l *loader) text(key, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		return value
-	}
-	return fallback
-}
-
-// required returns the trimmed value of key and records an error when unset.
-func (l *loader) required(key string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		l.errs = append(l.errs, fmt.Errorf("%s is required", key))
-	}
-	return value
-}
-
-// integer parses key as a base-10 integer, falling back when it is unset and
-// recording an error when it is set but malformed.
-func (l *loader) integer(key string, fallback int) int {
-	raw := l.text(key, "")
-	if raw == "" {
-		return fallback
-	}
-
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		l.errs = append(l.errs, fmt.Errorf("%s: %q is not a valid integer", key, raw))
-		return fallback
-	}
-	return value
-}
-
-// boolean parses key as a boolean ("true", "1", "false", "0", ...).
-func (l *loader) boolean(key string, fallback bool) bool {
-	raw := l.text(key, "")
-	if raw == "" {
-		return fallback
-	}
-
-	value, err := strconv.ParseBool(raw)
-	if err != nil {
-		l.errs = append(l.errs, fmt.Errorf("%s: %q is not a valid boolean", key, raw))
-		return fallback
-	}
-	return value
-}
-
-// duration parses key as a Go duration such as "15m", "168h" or "1h30m".
-func (l *loader) duration(key string, fallback time.Duration) time.Duration {
-	raw := l.text(key, "")
-	if raw == "" {
-		return fallback
-	}
-
-	value, err := time.ParseDuration(raw)
-	if err != nil {
-		l.errs = append(l.errs, fmt.Errorf("%s: %q is not a valid duration, want a value like %q or %q", key, raw, "15m", "168h"))
-		return fallback
-	}
-	return value
-}
-
-// list splits key on commas, trimming each entry and dropping empty ones.
-// Returns nil when the variable is unset.
-func (l *loader) list(key string) []string {
-	raw := l.text(key, "")
-	if raw == "" {
-		return nil
-	}
-
-	var values []string
-	for entry := range strings.SplitSeq(raw, ",") {
-		if entry = strings.TrimSpace(entry); entry != "" {
-			values = append(values, entry)
-		}
-	}
-	return values
 }

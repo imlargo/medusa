@@ -8,13 +8,13 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/imlargo/medusa v0.0.0
 	github.com/imlargo/medusa/auth v0.0.0
+	github.com/imlargo/medusa/env v0.0.0
 	github.com/imlargo/medusa/postgres v0.0.0
 	github.com/imlargo/medusa/storage v0.0.0
 	github.com/imlargo/ratelimit v0.1.1
 	github.com/imlargo/ratelimit/metrics/prometheus v0.1.1
 	github.com/imlargo/sse v0.1.0
 	github.com/jackc/pgx/v5 v5.12.0
-	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/swaggo/files v1.0.1
@@ -68,6 +68,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
@@ -107,6 +108,7 @@ require (
 replace (
 	github.com/imlargo/medusa => ../
 	github.com/imlargo/medusa/auth => ../auth
+	github.com/imlargo/medusa/env => ../env
 	github.com/imlargo/medusa/postgres => ../postgres
 	github.com/imlargo/medusa/storage => ../storage
 )

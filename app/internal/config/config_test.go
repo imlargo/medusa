@@ -409,3 +409,22 @@ func TestRateLimiterQuotasAreValidated(t *testing.T) {
 		})
 	}
 }
+
+// The migrate step runs before the API and must not need its secrets.
+func TestLoadDatabaseNeedsOnlyTheDatabaseURL(t *testing.T) {
+	t.Setenv(envDatabaseURL, "postgres://u:p@localhost/db")
+	t.Setenv(envJWTSecret, "")
+
+	db, err := LoadDatabase()
+	if err != nil {
+		t.Fatalf("LoadDatabase() = %v, want nil without JWT_SECRET", err)
+	}
+	if db.URL != "postgres://u:p@localhost/db" {
+		t.Errorf("URL = %q", db.URL)
+	}
+
+	t.Setenv(envDatabaseURL, "")
+	if _, err := LoadDatabase(); err == nil {
+		t.Error("LoadDatabase() = nil, want an error without DATABASE_URL")
+	}
+}

@@ -16,6 +16,7 @@ flowchart LR
         pg["postgres, postgres/pgtest (pgx, goose)"]
         auth["auth (golang-jwt, Gin)"]
         storage["storage (AWS SDK v2)"]
+        envb["env (godotenv)"]
     end
     subgraph medusa["/ core (github.com/imlargo/medusa)"]
         edge["medusa, middleware, health handlers (Gin)"]
@@ -28,7 +29,7 @@ flowchart LR
 ```
 
 - **The core** knows HTTP, errors, lifecycle, health and metrics. It knows nothing about users, databases or configuration.
-- **The batteries** each wrap one integration: `postgres` the pool, migrations and test databases, `auth` JWT tokens and the middleware, `storage` S3-compatible object storage. An app pays for a battery's dependencies only if it imports it.
+- **The batteries** each wrap one integration: `postgres` the pool, migrations and test databases, `auth` JWT tokens and the middleware, `storage` S3-compatible object storage, `env` typed environment variables. An app pays for a battery's dependencies only if it imports it.
 - **The app** owns everything specific to this product: its features, schema, queries, config and routes. It imports Medusa's public packages and nothing else from it.
 - **Within Medusa**, only the edge (the root package, `middleware` and the health handlers) depends on Gin. The rest takes standard library types.
 

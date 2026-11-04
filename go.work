@@ -1,8 +1,8 @@
-// The Medusa core at the root, its batteries (auth/, postgres/, storage/) and the
+// The Medusa core at the root, its batteries (auth/, env/, postgres/, storage/) and the
 // application in app/ share this workspace, so the editor and commands run
 // from the root resolve every Medusa import to this checkout. `./...` stops
 // at nested modules, so check them all with
-// `go test ./... ./auth/... ./postgres/... ./storage/... ./app/...`.
+// `go test ./... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...`.
 //
 // Consumers never see this file: `go get` fetches modules from the proxy, not
 // from a checkout.
@@ -14,6 +14,7 @@ use (
 	.
 	./app
 	./auth
+	./env
 	./postgres
 	./storage
 )
