@@ -63,7 +63,7 @@ Each item has an ID for its issue, a size (S: under a day, M: days, L: a week or
 | 1.1 | **Access and refresh tokens told apart**: a token kind that `auth.Middleware` checks, and `POST /v1/auth/refresh`. Part of the auth battery (2.3). Needs D1. | M | 0.6 | |
 | 1.2 | **Password policy** at registration, as a rule with its declared error. Needs D2. | S | | |
 | 1.3 | **Server timeouts**: read, write and idle defaults in `httpserver`; long routes extend their own deadline | M | | Done |
-| 1.4 | **Error code catalog**: a test that finds every declared `apperr` error, fails on duplicate codes, and generates `docs/errors.md`. It later feeds the error responses in the OpenAPI spec (2.1). | M | | |
+| 1.4 | **Error code catalog**: a test that finds every declared `apperr` error, fails on duplicate codes, and generates `app/api/errors.md`. It later feeds the error responses in the OpenAPI spec (2.1). | M | | Done (`apperr.Declared`, `TestErrorCatalog`) |
 | 1.5 | **The caller in `context.Context`**: `auth` puts a `Principal` (subject, scopes, method) in the request context, so services and jobs see who acts, and `auth.Require(scopes...)` guards routes. Casbin, OpenFGA or Cerbos stay recipes, not batteries. | M | | |
 | 1.6 | **Shutdown that drains**: on SIGTERM `/ready` answers 503 and the server waits a configurable delay before closing the listener, so the load balancer stops sending first. | S | | Done (`SHUTDOWN_DRAIN_DELAY`) |
 | 1.7 | **Request deadline** middleware: every request's context gets a deadline, and an expired one is `server.timeout` (503). | S | | Done (`REQUEST_TIMEOUT`) |
