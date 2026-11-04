@@ -6,9 +6,11 @@ Medusa is a set of small Go packages for building HTTP APIs on Gin. The core doe
 go get github.com/imlargo/medusa            # core
 go get github.com/imlargo/medusa/postgres   # battery: pgx pool, goose migrations, test databases
 go get github.com/imlargo/medusa/auth       # battery: JWT and its middleware
+go get github.com/imlargo/medusa/env        # battery: typed environment variables
+go get github.com/imlargo/medusa/storage    # battery: S3-compatible object storage
 ```
 
-Requires Go 1.27. Medusa is pre-1.0, so minor versions may break the API; `v0.0.1` predates this layout.
+Requires Go 1.27. Each module has its own `CHANGELOG.md` and releases (`v0.1.0` for the core). Medusa is pre-1.0, so minor versions may break the API; `v0.0.1` predates this layout.
 
 ## Core packages
 

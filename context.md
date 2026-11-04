@@ -17,7 +17,7 @@ Production project. Quality target: an enterprise-grade Go codebase, following t
 
 ## Status (2026-11-04)
 
-Medusa is on `main` (PR #19) and released: the core and every battery are at `v0.1.0` (GitHub releases and the Go proxy). The app is the example built on Medusa; it is not deployed and has no clients.
+Medusa is on `main` (PR #19) and released: the core, `env`, `postgres` and `storage` at `v0.1.0`, `auth` at `v0.1.1` (GitHub releases and the Go proxy). `auth/v0.1.0` is retracted: it was tagged before `auth` required the released core. The app is the example built on Medusa; it is not deployed and has no clients.
 
 The separation from the app came first. Data access moved from GORM to pgx v5 + sqlc + goose in the same phase.
 
