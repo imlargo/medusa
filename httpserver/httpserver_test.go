@@ -29,7 +29,7 @@ func freePort(t *testing.T) int {
 	if err != nil {
 		t.Fatalf("reserve a port: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	return listener.Addr().(*net.TCPAddr).Port
 }
@@ -55,7 +55,7 @@ func TestStartReturnsAnErrorInsteadOfExiting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("occupy the port: %v", err)
 	}
-	defer occupied.Close()
+	defer func() { _ = occupied.Close() }()
 
 	srv := New(http.NewServeMux(), quietLogger(t), WithHost("127.0.0.1"), WithPort(port))
 
@@ -78,7 +78,7 @@ func TestStartServesUntilStopped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /ping: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -189,7 +189,7 @@ func TestStopDrainsEvenWithACanceledContext(t *testing.T) {
 	if resp == nil {
 		t.Fatal("the in-flight request was aborted, want it drained")
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("in-flight request status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -204,6 +204,45 @@ func TestReadHeaderTimeoutDefaultsAndCanBeDisabled(t *testing.T) {
 	srv := newTestServer(t, WithReadHeaderTimeout(-1))
 	if got := srv.readHeaderTimeout; got >= 0 {
 		t.Errorf("readHeaderTimeout = %s, want a negative value to mean disabled", got)
+	}
+}
+
+// A handler slower than the write timeout loses its response, unless it
+// extends its own deadline the way a stream does.
+func TestWriteTimeoutCanBeExtendedPerRequest(t *testing.T) {
+	const timeout = 100 * time.Millisecond
+
+	router := http.NewServeMux()
+	router.HandleFunc("GET /slow", func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(3 * timeout)
+		_, _ = w.Write([]byte("late"))
+	})
+	router.HandleFunc("GET /extended", func(w http.ResponseWriter, _ *http.Request) {
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Errorf("SetWriteDeadline() = %v", err)
+		}
+		time.Sleep(3 * timeout)
+		_, _ = w.Write([]byte("on time"))
+	})
+
+	srv := New(router, quietLogger(t), WithHost("127.0.0.1"), WithPort(freePort(t)), WithWriteTimeout(timeout))
+	go func() { _ = srv.Start(context.Background()) }()
+	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
+	waitUntilServing(t, srv.Addr())
+
+	slow, err := http.Get("http://" + srv.Addr() + "/slow")
+	if err == nil {
+		_ = slow.Body.Close()
+		t.Errorf("GET /slow = %d, want the connection closed by the write timeout", slow.StatusCode)
+	}
+
+	resp, err := http.Get("http://" + srv.Addr() + "/extended")
+	if err != nil {
+		t.Fatalf("GET /extended: %v, want the extended deadline to let it finish", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("GET /extended = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
 
@@ -223,7 +262,7 @@ func waitUntilServing(t *testing.T, addr string) {
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

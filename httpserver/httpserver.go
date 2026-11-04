@@ -11,6 +11,12 @@
 //	    httpserver.WithShutdownTimeout(15*time.Second),
 //	)
 //
+// Every timeout has a default, so a slow or idle client cannot hold a
+// connection open forever. A route that legitimately writes for longer than
+// the write timeout (a stream, a large download) extends its own deadline:
+//
+//	http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Minute))
+//
 // Start returns its error rather than terminating the process: deciding
 // whether a failed listen is fatal belongs to the application.
 package httpserver
@@ -39,6 +45,18 @@ const (
 	// request headers. Without it a handful of connections trickling headers
 	// one byte at a time can hold the server open indefinitely (Slowloris).
 	DefaultReadHeaderTimeout = 10 * time.Second
+
+	// DefaultReadTimeout caps how long a client may take to send a whole
+	// request, body included.
+	DefaultReadTimeout = time.Minute
+
+	// DefaultWriteTimeout caps how long a handler may take to write its
+	// response, counted from the end of the request headers.
+	DefaultWriteTimeout = time.Minute
+
+	// DefaultIdleTimeout caps how long a keep-alive connection waits for the
+	// next request.
+	DefaultIdleTimeout = 2 * time.Minute
 )
 
 // Server serves an http.Handler. Start must be called once.
@@ -48,6 +66,9 @@ type Server struct {
 	port              int
 	shutdownTimeout   time.Duration
 	readHeaderTimeout time.Duration
+	readTimeout       time.Duration
+	writeTimeout      time.Duration
+	idleTimeout       time.Duration
 	logger            *slog.Logger
 
 	// mu guards httpSrv, which Start publishes and Stop reads, possibly from
@@ -72,6 +93,9 @@ func New(handler http.Handler, logger *slog.Logger, opts ...Option) *Server {
 		port:              DefaultPort,
 		shutdownTimeout:   DefaultShutdownTimeout,
 		readHeaderTimeout: DefaultReadHeaderTimeout,
+		readTimeout:       DefaultReadTimeout,
+		writeTimeout:      DefaultWriteTimeout,
+		idleTimeout:       DefaultIdleTimeout,
 		logger:            logger,
 	}
 
@@ -107,6 +131,26 @@ func WithReadHeaderTimeout(d time.Duration) Option {
 	return func(s *Server) { s.readHeaderTimeout = d }
 }
 
+// WithReadTimeout caps how long a client may take to send a whole request.
+// A negative duration disables the limit.
+func WithReadTimeout(d time.Duration) Option {
+	return func(s *Server) { s.readTimeout = d }
+}
+
+// WithWriteTimeout caps how long a handler may take to write its response.
+// A route that needs longer extends its own deadline with
+// http.ResponseController. A negative duration disables the limit.
+func WithWriteTimeout(d time.Duration) Option {
+	return func(s *Server) { s.writeTimeout = d }
+}
+
+// WithIdleTimeout caps how long a keep-alive connection waits for the next
+// request. A negative duration falls back to the read timeout, as net/http
+// does.
+func WithIdleTimeout(d time.Duration) Option {
+	return func(s *Server) { s.idleTimeout = d }
+}
+
 // Addr returns the address the server listens on.
 func (s *Server) Addr() string {
 	return net.JoinHostPort(s.host, strconv.Itoa(s.port))
@@ -122,6 +166,9 @@ func (s *Server) Start(ctx context.Context) error {
 		Addr:              s.Addr(),
 		Handler:           s.handler,
 		ReadHeaderTimeout: max(s.readHeaderTimeout, 0),
+		ReadTimeout:       max(s.readTimeout, 0),
+		WriteTimeout:      max(s.writeTimeout, 0),
+		IdleTimeout:       max(s.idleTimeout, 0),
 	}
 
 	s.mu.Lock()
