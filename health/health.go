@@ -11,6 +11,7 @@ package health
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -35,10 +36,12 @@ type Result struct {
 	Err    error  `json:"-"`
 }
 
-// Report is the combined outcome of every check.
+// Report is the combined outcome of every check. Draining means the instance
+// is shutting down: it is unhealthy on purpose, and no check ran.
 type Report struct {
-	Status string   `json:"status"`
-	Checks []Result `json:"checks,omitempty"`
+	Status   string   `json:"status"`
+	Draining bool     `json:"draining,omitempty"`
+	Checks   []Result `json:"checks,omitempty"`
 }
 
 type check struct {
@@ -49,8 +52,9 @@ type check struct {
 // Service holds the registered checks. Register them during initialization,
 // before the first call to Check.
 type Service struct {
-	checks  []check
-	timeout time.Duration
+	checks   []check
+	timeout  time.Duration
+	draining atomic.Bool
 }
 
 // New creates a service whose rounds of checks are bounded by timeout, or by
@@ -74,12 +78,39 @@ func (s *Service) Register(name string, fn CheckFunc) {
 	s.checks = append(s.checks, check{name: name, fn: fn})
 }
 
+// Drain takes the instance out of rotation before it shuts down: from now on
+// Check reports it unhealthy, so /ready answers 503, and Drain waits delay
+// (or until ctx is done) for the load balancer to notice and stop sending
+// requests. Run it as the first shutdown hook, before the server closes its
+// listener; without it, requests routed during that window are refused.
+//
+// The delay should cover a few readiness probe periods. It is spent before
+// the shutdown budget, so the orchestrator's grace period has to cover both.
+func (s *Service) Drain(ctx context.Context, delay time.Duration) error {
+	s.draining.Store(true)
+	if delay <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	return nil
+}
+
 // Check runs every registered check and reports the combined status.
 //
 // Checks run concurrently, so a probe over N dependencies costs the slowest
 // one rather than the sum. The timeout bounds the whole round, and results
 // keep registration order so the response is stable across calls.
 func (s *Service) Check(ctx context.Context) Report {
+	if s.draining.Load() {
+		return Report{Status: StatusUnhealthy, Draining: true}
+	}
+
 	checkCtx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 

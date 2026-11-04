@@ -50,6 +50,9 @@ func (h *Handler) Ready(c *gin.Context) {
 		"checks":     report.Checks,
 		"request_id": medusa.NewContext(c).RequestID(),
 	}
+	if report.Draining {
+		body["draining"] = true
+	}
 
 	if report.Status == StatusUnhealthy {
 		c.Header("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))

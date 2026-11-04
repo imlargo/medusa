@@ -85,3 +85,36 @@ func TestReadyReplies503WhenACheckFails(t *testing.T) {
 		t.Errorf("body = %s, want the check's error kept out of it", rec.Body)
 	}
 }
+
+// A draining instance must leave rotation even though its dependencies are
+// fine, and Drain must hold shutdown back for the delay.
+func TestDrainTakesTheInstanceOutOfRotation(t *testing.T) {
+	svc := New(time.Second)
+	svc.Register("database", func(context.Context) error { return nil })
+
+	start := time.Now()
+	if err := svc.Drain(t.Context(), 50*time.Millisecond); err != nil {
+		t.Fatalf("Drain() = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 50*time.Millisecond {
+		t.Errorf("Drain returned after %s, want it to wait the delay", elapsed)
+	}
+
+	report := svc.Check(t.Context())
+	if report.Status != StatusUnhealthy || !report.Draining {
+		t.Errorf("Check() = %+v, want unhealthy and draining", report)
+	}
+}
+
+func TestDrainStopsWaitingWhenTheContextEnds(t *testing.T) {
+	svc := New(time.Second)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	start := time.Now()
+	_ = svc.Drain(ctx, time.Minute)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("Drain waited %s with a canceled context, want it to return", elapsed)
+	}
+}
