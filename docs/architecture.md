@@ -84,12 +84,12 @@ Middleware runs in this order:
 
 | Order | Middleware | Scope | Effect |
 |---|---|---|---|
-| 1 | `gin.Recovery` | all | A panic becomes a 500 instead of killing the process |
-| 2 | access log | all | One slog line per request, level by status |
-| 3 | `middleware.RequestID` | all | Reuses a client `X-Request-ID` only if it is a valid UUID, otherwise generates one; echoed in the response and the body |
-| 4 | `middleware.CORS` | all | Configured origins plus the server's own URL |
-| 5 | `middleware.BodyLimit` | all | Bodies over `MAX_REQUEST_BODY_BYTES` fail with 413 |
-| 6 | `middleware.Metrics` | all, when enabled | Count and duration per route template |
+| 1 | access log | all | One slog line per request, level by status |
+| 2 | `middleware.RequestID` | all | Reuses a client `X-Request-ID` only if it is a valid UUID, otherwise generates one; echoed in the response and the body |
+| 3 | `middleware.CORS` | all | Configured origins plus the server's own URL |
+| 4 | `middleware.BodyLimit` | all | Bodies over `MAX_REQUEST_BODY_BYTES` fail with 413 |
+| 5 | `middleware.Metrics` | all, when enabled | Count and duration per route template |
+| 6 | `middleware.Recover` | all | A panic is logged with its stack and answered as a `server.internal` problem; the access log and metrics above it record a 500 |
 | 7 | `middleware.RateLimit` | `/v1` | 429 over quota; credential endpoints get a tighter rule |
 | 8 | `auth.Middleware` | protected `/v1` routes | Valid bearer token (signature, expiry, issuer) required; stores the user ID |
 

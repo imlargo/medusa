@@ -47,7 +47,7 @@ func newRouter(c *Container) *gin.Engine {
 		c.Logger.Error("invalid trusted proxy configuration", slog.Any("error", err))
 	}
 
-	router.Use(gin.Recovery(), accessLogMiddleware(c.Logger))
+	router.Use(accessLogMiddleware(c.Logger))
 
 	registerRoutes(router, c)
 
@@ -68,17 +68,20 @@ func ginMode(c *Container) string {
 // Middleware order matters: the request ID comes first so everything downstream
 // can log it, CORS runs before any middleware that may abort so preflight
 // responses keep their headers, and metrics wrap the rest to measure the real
-// end-to-end latency of a request.
+// end-to-end latency of a request. Recover comes last, so a panic still
+// reaches the access log and the metrics as a 500.
 func registerRoutes(router *gin.Engine, c *Container) {
 	router.Use(
 		middleware.RequestID(),
 		middleware.CORS(allowedOrigins(c)),
 		middleware.BodyLimit(c.Config.Runtime.MaxRequestBody),
 	)
-
 	if c.Metrics != nil {
 		router.Use(middleware.Metrics(c.Metrics))
+	}
+	router.Use(middleware.Recover(c.Logger))
 
+	if c.Metrics != nil {
 		// Scraped from this container's own registry, not the global default.
 		// It exposes internal request paths and latencies, so restrict it at the
 		// ingress or network layer.
