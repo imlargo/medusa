@@ -1,0 +1,43 @@
+version: "2"
+
+# Shared by every module: golangci-lint looks for this file in the module's
+# directory and then in its parents.
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gosec
+    - misspell
+    - noctx
+    - nolintlint
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - usestdlibvars
+  settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    generated: lax
+    paths:
+      - app/api/docs
+      - app/internal/database/sqlc
+    rules:
+      # Tests build requests and files with fixed inputs on purpose.
+      - path: _test\.go
+        linters: [gosec, noctx]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/imlargo/medusa
+  exclusions:
+    generated: lax
