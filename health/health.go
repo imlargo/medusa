@@ -27,11 +27,12 @@ const (
 // CheckFunc reports a dependency as unhealthy by returning an error.
 type CheckFunc func(ctx context.Context) error
 
-// Result is the outcome of one check.
+// Result is the outcome of one check. Err is never serialized: a driver error
+// can name hosts, users and databases, and /ready is public.
 type Result struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Message string `json:"message,omitempty"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Err    error  `json:"-"`
 }
 
 // Report is the combined outcome of every check.
@@ -90,7 +91,7 @@ func (s *Service) Check(ctx context.Context) Report {
 			result := Result{Name: c.name, Status: StatusHealthy}
 			if err := c.fn(checkCtx); err != nil {
 				result.Status = StatusUnhealthy
-				result.Message = err.Error()
+				result.Err = err
 			}
 
 			// Each goroutine owns exactly one slot, so no lock is needed.

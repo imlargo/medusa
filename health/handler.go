@@ -1,6 +1,7 @@
 package health
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -34,8 +35,15 @@ func (h *Handler) Live(c *gin.Context) {
 }
 
 // Ready runs every check and replies 503 with Retry-After when any fails.
+// The body names the failing checks; why they failed goes to Gin's error list,
+// which the access log records.
 func (h *Handler) Ready(c *gin.Context) {
 	report := h.service.Check(c.Request.Context())
+	for _, result := range report.Checks {
+		if result.Err != nil {
+			_ = c.Error(fmt.Errorf("health check %s: %w", result.Name, result.Err))
+		}
+	}
 
 	body := gin.H{
 		"status":     report.Status,

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,15 +26,19 @@ func TestCheckReportsEveryResultInRegistrationOrder(t *testing.T) {
 
 	want := []Result{
 		{Name: "database", Status: StatusHealthy},
-		{Name: "redis", Status: StatusUnhealthy, Message: "connection refused"},
+		{Name: "redis", Status: StatusUnhealthy},
 	}
 	if len(report.Checks) != len(want) {
 		t.Fatalf("checks = %v, want %v", report.Checks, want)
 	}
 	for i := range want {
-		if report.Checks[i] != want[i] {
-			t.Errorf("checks[%d] = %+v, want %+v", i, report.Checks[i], want[i])
+		got := report.Checks[i]
+		if got.Name != want[i].Name || got.Status != want[i].Status {
+			t.Errorf("checks[%d] = %+v, want %+v", i, got, want[i])
 		}
+	}
+	if err := report.Checks[1].Err; err == nil || err.Error() != "connection refused" {
+		t.Errorf("checks[1].Err = %v, want the check's error kept for the caller", err)
 	}
 }
 
@@ -53,7 +58,7 @@ func TestReadyReplies503WhenACheckFails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	svc := New(time.Second)
-	svc.Register("database", func(context.Context) error { return errors.New("down") })
+	svc.Register("database", func(context.Context) error { return errors.New("dial tcp db.internal:5432: refused") })
 
 	router := gin.New()
 	router.GET("/ready", NewHandler(svc).Ready)
@@ -74,5 +79,9 @@ func TestReadyReplies503WhenACheckFails(t *testing.T) {
 	}
 	if body["status"] != StatusUnhealthy {
 		t.Errorf("status = %v, want %q", body["status"], StatusUnhealthy)
+	}
+	// /ready is public: a driver error names internal hosts.
+	if strings.Contains(rec.Body.String(), "db.internal") {
+		t.Errorf("body = %s, want the check's error kept out of it", rec.Body)
 	}
 }
