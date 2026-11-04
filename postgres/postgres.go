@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -75,21 +76,10 @@ func WithQueryLogging(enabled bool) Option {
 // host fails at startup rather than on the first request. Statements slower
 // than SlowQueryThreshold are logged as warnings.
 func Open(ctx context.Context, url string, logger *slog.Logger, opts ...Option) (*pgxpool.Pool, error) {
-	var o options
-	for _, opt := range opts {
-		opt(&o)
-	}
-
-	cfg, err := pgxpool.ParseConfig(url)
+	cfg, err := poolConfig(url, logger, opts...)
 	if err != nil {
-		// The parse error can quote the URL, and the URL carries the password.
-		return nil, errors.New("parse postgres url: invalid connection string")
+		return nil, err
 	}
-
-	cfg.MaxConns = DefaultMaxConns
-	cfg.MaxConnLifetime = DefaultConnMaxLifetime
-	cfg.MaxConnIdleTime = DefaultConnMaxIdleTime
-	cfg.ConnConfig.Tracer = &queryTracer{logger: logger, verbose: o.logQueries}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
@@ -102,6 +92,37 @@ func Open(ctx context.Context, url string, logger *slog.Logger, opts ...Option) 
 	}
 
 	return pool, nil
+}
+
+// poolConfig parses url and applies Medusa's pool defaults to every setting
+// the url leaves out: pool_max_conns, pool_max_conn_lifetime and
+// pool_max_conn_idle_time in the url win, so a deployment can tune the pool
+// without a code change.
+func poolConfig(url string, logger *slog.Logger, opts ...Option) (*pgxpool.Config, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		// The parse error can quote the URL, and the URL carries the password.
+		return nil, errors.New("parse postgres url: invalid connection string")
+	}
+
+	// The keys are the same in the URL and the key=value forms.
+	if !strings.Contains(url, "pool_max_conns") {
+		cfg.MaxConns = DefaultMaxConns
+	}
+	if !strings.Contains(url, "pool_max_conn_lifetime") {
+		cfg.MaxConnLifetime = DefaultConnMaxLifetime
+	}
+	if !strings.Contains(url, "pool_max_conn_idle_time") {
+		cfg.MaxConnIdleTime = DefaultConnMaxIdleTime
+	}
+	cfg.ConnConfig.Tracer = &queryTracer{logger: logger, verbose: o.logQueries}
+
+	return cfg, nil
 }
 
 // codeUniqueViolation is the SQLSTATE of a broken unique constraint.

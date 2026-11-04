@@ -91,3 +91,28 @@ func TestTracerLogsEveryQueryWhenVerbose(t *testing.T) {
 		t.Errorf("log %q, want the statement and its arguments", out)
 	}
 }
+
+// A deployment tunes the pool from the URL; Medusa's defaults fill only what
+// the URL leaves out.
+func TestPoolSettingsInTheURLWinOverTheDefaults(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+
+	defaults, err := poolConfig("postgres://u:p@localhost/db", logger)
+	if err != nil {
+		t.Fatalf("poolConfig() = %v", err)
+	}
+	if defaults.MaxConns != DefaultMaxConns || defaults.MaxConnLifetime != DefaultConnMaxLifetime {
+		t.Errorf("MaxConns, MaxConnLifetime = %d, %s, want the defaults", defaults.MaxConns, defaults.MaxConnLifetime)
+	}
+
+	tuned, err := poolConfig("postgres://u:p@localhost/db?pool_max_conns=7&pool_max_conn_lifetime=5m", logger)
+	if err != nil {
+		t.Fatalf("poolConfig() = %v", err)
+	}
+	if tuned.MaxConns != 7 || tuned.MaxConnLifetime != 5*time.Minute {
+		t.Errorf("MaxConns, MaxConnLifetime = %d, %s, want 7, 5m from the url", tuned.MaxConns, tuned.MaxConnLifetime)
+	}
+	if tuned.MaxConnIdleTime != DefaultConnMaxIdleTime {
+		t.Errorf("MaxConnIdleTime = %s, want the default", tuned.MaxConnIdleTime)
+	}
+}
