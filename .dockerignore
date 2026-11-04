@@ -1,21 +1,23 @@
-# Keep this file conservative. Because the Dockerfile does `COPY . .`, anything
-# excluded here is invisible to the build — and an excluded source file makes the
-# COPY layer digest stay identical across a real change, so the layer is served
-# from cache and the binary silently keeps the old code. Never add a pattern that
-# can match anything under cmd/, internal/, pkg/ or api/.
+# Keep this file conservative. Because app/Dockerfile does `COPY . .` from the
+# repository root, anything excluded here is invisible to the build, and an
+# excluded source file makes the COPY layer digest stay identical across a real
+# change, so the layer is served from cache and the binary silently keeps the
+# old code. Never add a pattern that can match Go sources or app/api/docs.
 
 # Git
 .git
 .gitignore
 .gitattributes
 
-# Docs (api/docs is generated Swagger and IS needed by the build)
-README.md
+# Docs and research (app/api/docs is generated Swagger and IS needed by the build)
+**/README.md
 CHANGELOG.md
 LICENSE
+reports
+research_notes
 
 # Docker and CI
-Dockerfile*
+**/Dockerfile*
 docker-compose*
 .dockerignore
 .github
@@ -25,10 +27,10 @@ docker-compose*
 .idea
 
 # Build artifacts
-bin/
+**/bin/
 dist/
 build/
-tmp/
+**/tmp/
 temp/
 *.exe
 
@@ -37,5 +39,5 @@ coverage.out
 coverage.html
 
 # Secrets: these must never reach an image layer
-.env
-.env.*
+**/.env
+**/.env.*

@@ -1,0 +1,207 @@
+# AGENTS.md
+
+How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md), what comes next in [docs/roadmap.md](docs/roadmap.md), how the system behaves at runtime in [docs/architecture.md](docs/architecture.md), and the reasoning behind the layout in [docs/adr/](docs/adr/) (0001: Medusa apart from the app, 0002: batteries as optional modules, 0003: application errors and business rules).
+
+## The mental model
+
+There are two things in this repo, Medusa and an app built on it, and the whole layout follows from keeping them apart. Medusa itself has two layers: a core and optional batteries.
+
+| | Medusa core | Medusa batteries | The app |
+|---|---|---|---|
+| What | A toolkit for HTTP APIs on Gin | Ready-made pieces most APIs need, opt-in | One concrete API built on Medusa |
+| Where | Repository root (`/`) | `auth/`, `env/`, `postgres/`, `storage/` | `app/` |
+| Module | `github.com/imlargo/medusa` | `github.com/imlargo/medusa/<battery>`, one each | `github.com/imlargo/medusa/app` |
+| Knows about | HTTP, errors, lifecycle, health, metrics | One integration each (golang-jwt, godotenv, pgx + goose, the AWS SDK) | Users, its schema, Redis, config, routes |
+| Imports | Never a battery or the app | The core at most, never the app | Medusa, through its public packages only |
+
+The direction is one way: **app -> batteries -> core**. If a change to Medusa needs an app type, the change belongs in the app.
+
+`go.work` at the root ties every module to this checkout. `app/go.mod` and `auth/go.mod` also `replace` the Medusa modules with their local paths, so each builds on its own too.
+
+## Where does my code go?
+
+| I want to... | Put it in |
+|---|---|
+| Add an endpoint, a business rule, a table, a query | The app, in the feature's package (see the recipes below) |
+| Change config or environment variables | `app/internal/config` (+ `app/.env.example`); how variables are read is Medusa's `env` |
+| Change how tokens are signed, parsed or required | Medusa: `auth/` |
+| Change registration, login or token expiry | `app/internal/account` |
+| Change how routes or middleware are wired | `app/cmd/api/bootstrap/routes.go` |
+| Add a dependency to the running app (a client, a pool) | `app/cmd/api/bootstrap/container.go` |
+| Change the error model or how errors are rendered | Medusa: `apperr/`, `httperr/`, `response.go` |
+| Change the pool, migrations runner or test databases | Medusa: `postgres/` |
+| Add a generic middleware or helper any API could use | Medusa, if it passes the checklist below |
+
+When in doubt, put it in the app. Moving code into Medusa later is easy; taking an API out of a library is not.
+
+### Medusa map
+
+Core:
+
+| Package | Holds |
+|---|---|
+| `medusa` (root) | `Context`, `Handle`/`HandleCreate`/`HandleUpdate`/`HandleGet`/`HandleDelete`, response writers, `RequestIDKey`, `RequestIDFrom(ctx)`, `LogHandler`, the request errors (`ErrValidation`, `ErrMissingCredentials`...) |
+| `apperr` | `Error`, `Kind`, declaring constructors (`NotFound`, `Conflict`, `FailedPrecondition`...), `From`, `Declared` (every declared error, for the catalog) |
+| `httperr` | `Status(kind)`, `Problem` (RFC 9457), `NewProblem`, `Write` for plain net/http |
+| `middleware` | `RequestID`, `SecureHeaders`, `Recover`, `Timeout`, `CORS`, `BodyLimit`, `Metrics`, `RateLimit`, `APIKey`, `BearerAPIKey` |
+| `health` | `Service.Register(name, fn)`, `Service.Drain(ctx, delay)`, `Handler.Live`, `Handler.Ready` |
+| `httpserver` | `New(handler, logger, opts...)`: serves any `http.Handler` with graceful shutdown |
+| `job` | `Every(name, interval, fn, opts...)`: periodic background work, run and stopped by `lifecycle` |
+| `lifecycle` | `New(opts...).Run(ctx)`: runs servers and hooks, stops on SIGINT/SIGTERM |
+| `metrics` | `NewHTTP(registry)`: Prometheus request metrics |
+
+Batteries:
+
+| Module | Holds |
+|---|---|
+| `postgres` | `Open(ctx, url, logger, opts...)`, `Migrate(ctx, url, migrations, logger)`, `Conn`, `IsNoRows`, `IsUniqueViolation` |
+| `postgres/pgtest` | `New(t, migrations)`: a fresh database per test, cloned from a template migrated once per set of migrations |
+| `auth` | `NewJWT[S](secret, WithIssuer(...))`, `Sign`, `Parse`, `Middleware(j)`, `SubjectFrom[S](ctx)` |
+| `storage` | S3/R2 object storage: `NewFileStorage`, key validation, bulk delete |
+| `env` | `LoadDotEnv()`, `New()`: typed getters (`Required`, `Int`, `Duration`, `List`...) that collect every problem into `Err()` |
+
+### App map
+
+```
+app/
+  cmd/api/main.go               entry point, calls bootstrap
+  cmd/api/bootstrap/            wiring: container.go (dependencies), routes.go (every route), app.go
+  cmd/migrate/                  applies migrations, run as its own deploy step
+  internal/config/              loads and validates env vars
+  internal/database/
+    migrations/                 goose migrations (the schema), embedded as migrations.FS
+    queries/*.sql               sqlc queries
+    sqlc/                       GENERATED by `make sqlc`, never edit
+  internal/user/                feature: User, NormalizeEmail, errors, Repository
+  internal/account/             feature: register, login, me (Service, Handler, errors)
+  internal/events/              feature: SSE stream and publish (Handler, errors)
+  internal/store/               every feature's repository, WithTx across features
+  api/docs/                     GENERATED by `make docs`, never edit
+  api/errors.md                 GENERATED by TestErrorCatalog: every error code the API answers with
+```
+
+Code is grouped by feature, not by layer. Inside a feature a request flows handler -> service -> repository -> sqlc -> Postgres, and the feature's errors flow back up unchanged until `medusa.WriteError` renders them.
+
+A feature package holds, as files:
+
+| File | Holds |
+|---|---|
+| `<feature>.go` | The domain types and the rules on them (`user.NormalizeEmail`) |
+| `errors.go` | Every error the feature can return, declared with `apperr` |
+| `repository.go` | Storage: sqlc rows to domain types, driver errors to the feature's errors |
+| `service.go` | Use cases: rules that need storage or other features |
+| `handler.go` | Request types (`binding` tags), handler methods, swag annotations |
+
+Only the files the feature needs exist: `user` has no service or handler, `events` no repository.
+
+## Recipes
+
+### Add an endpoint
+
+1. In the feature's package (a new `app/internal/<feature>` if none fits): the request type in `handler.go`, with `binding:"..."` tags for the shape of the input (required, email, lengths).
+2. The logic as a method on the feature's `Service`. Business rules return the feature's declared errors (next recipe); any other error becomes a 500.
+3. A handler method with the shape `func(ctx *medusa.Context, in *X) (*Y, error)`, plus swag annotations listing each error code it can return (`@Failure 409 {object} httperr.Problem "user.email_taken"`).
+4. A new service or handler is constructed in `buildServices` / `buildHandlers` in `container.go`.
+5. The route in `routes.go`, wrapped in the adapter for its verb: `medusa.HandleCreate(h.Create)`. Use `g.protected` when it needs a logged-in user, and read the user with `auth.SubjectFrom[int64](ctx)`.
+6. `make docs`.
+
+### Add a business rule and its error
+
+1. The rule goes in one place: a function or method on the domain type in `<feature>.go` when it needs no storage, a method on the `Service` when it does. Never in a handler or a repository, except the storage invariants a repository enforces (`NormalizeEmail`).
+2. Its error in the feature's `errors.go`, declared once:
+   `var ErrOrderShipped = apperr.FailedPrecondition("order.already_shipped", "the order has already shipped")`.
+   - The code is `<feature>.<rule>`, lowercase with underscores. It is part of the API contract: never rename one that shipped.
+   - The message is safe to show to anyone. Never build it from an error or from user input; put specifics in `WithFields` or `WithMeta`.
+   - Pick the kind by what the caller can do, using the table in [ADR 0003](docs/adr/0003-application-errors-and-business-rules.md). Ask "can the same request succeed later?" and "is the input itself wrong?".
+3. Return it as is, or with the cause for the log: `return ErrOrderShipped.WithCause(err)`. Callers match it with `errors.Is`.
+4. A test that asserts the rule returns exactly that error.
+5. Regenerate the catalog of codes, `app/api/errors.md`: `go test ./cmd/api/bootstrap -run TestErrorCatalog -update` from `app/`. CI fails when it is out of date or a code is declared twice.
+
+### Add a table or a query
+
+1. A new numbered file in `app/internal/database/migrations` (`00002_create_x.sql`) starting with `-- +goose Up`. Never edit a migration that has been applied.
+2. The queries in `app/internal/database/queries/x.sql`, each with `-- name: Name :one|:many|:exec`.
+3. `make sqlc`.
+4. A `Repository` in the feature's `repository.go` that maps the generated rows to the feature's types and turns driver errors into the feature's errors in `classify` (`postgres.IsNoRows` -> `ErrNotFound`, `postgres.IsUniqueViolation` -> the rule the constraint enforces). Never return `sqlc` types past the repository.
+5. Add it to `store.Store`.
+6. A test next to the repository using `pgtest.New(t, migrations.FS)` (see `user/repository_test.go`).
+7. `make migrate` against your database.
+
+### Write to several repositories atomically
+
+Wrap the writes in `store.WithTx` and use the `*Store` it hands you, never the outer one:
+
+```go
+err := s.store.WithTx(ctx, func(tx *store.Store) error {
+    // every tx.<Repo> call here shares one transaction
+})
+```
+
+Returning an error, or panicking, rolls everything back. A `WithTx` inside another is a savepoint.
+
+`store` imports every feature that owns a repository, so those features can never import `store` back: Go rejects the cycle. Two cases follow:
+
+- **Several tables of one feature** (an order and its items): the transaction lives in that feature's repository. It takes a `postgres.Conn`, and opens the transaction with `pgx.BeginFunc(ctx, conn, ...)` over `sqlc.New(tx)`.
+- **Several features** (create a user and their workspace): the use case lives in a feature without a repository of its own, the way `account` builds on `user`, and that feature calls `store.WithTx`.
+
+### Add a background job
+
+1. The work as a method `func(ctx context.Context) error` on a service. It must return when `ctx` is canceled.
+2. In `bootstrap/app.go`, register it with the lifecycle next to the HTTP server:
+   `lifecycle.WithServer(server, job.Every("expire-sessions", time.Minute, container.Services.Sessions.Expire, job.WithLogger(container.Logger)))` (names are an example).
+
+`lifecycle` then starts it, and on shutdown cancels it and waits for the run in progress. Never start a goroutine with `go` for long-lived work: nobody stops it, and a panic in it kills the process. With several replicas every replica runs the job; work that must run once per cluster needs a lock or a queue.
+
+### Add something to Medusa
+
+A new **battery** is a new module: its own directory with a `go.mod`, added to `go.work` and, if the app uses it, to the app's `require` and `replace` and the `COPY` lines in `app/Dockerfile`. It is for an integration with a heavy or opinionated dependency that many APIs need. Its API may use that dependency's types.
+
+Code for the **core**, only if every answer is yes:
+
+- Would a different API, with different users and data, use it unchanged?
+- Does it avoid app concepts (users, IDs, config, a specific database)?
+- Does its signature use standard library types (`context.Context`, `http.Handler`, `*slog.Logger`) or Gin at the edge?
+
+Then: add it with a test next to it, keep the exported surface small, and run the Medusa checks. Medusa is versioned with semver; every exported name is a promise.
+
+### Release a module
+
+Every module (the core and each battery) is versioned and released on its own, with semver. While a module is `v0`, a breaking change bumps the minor version.
+
+1. Each change lands with its entry under `[Unreleased]` in that module's `CHANGELOG.md` (`CHANGELOG.md` at the root for the core, `<battery>/CHANGELOG.md` for a battery). It is written for users, and a breaking change leads its line and says how to migrate.
+2. To release, a PR renames `[Unreleased]` to the version with the date and adds a new empty `[Unreleased]` above it, then merges.
+3. Tag the merge commit on `main` with an annotated tag: `v0.2.0` for the core, `<battery>/v0.2.0` for a battery. Push the tag. `release.yml` creates the GitHub release from the changelog section and publishes the version to the Go proxy.
+4. The core goes first. A battery that requires the core (`auth`) then gets a PR raising its `require` to the new core version, and is tagged after that PR merges.
+
+`main` only takes merges from PRs whose `ci` check passed.
+
+## Commands
+
+| Where | Command | Does |
+|---|---|---|
+| root | `go test ./... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...` | Tests every module (`./...` alone is only the core) |
+| root | `go vet ./... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...` | Vets every module |
+| `app/` | `TEST_DATABASE_URL=postgres://... go test ./...` | Also runs the database tests (skipped without the URL) |
+| `app/` | `make run` / `make dev` | Runs the API / with hot reload |
+| `app/` | `make migrate` | Applies pending migrations |
+| `app/` | `make sqlc` | Regenerates `internal/database/sqlc` (Docker) |
+| `app/` | `make docs` | Regenerates `api/docs` (Docker) |
+| root | `docker build -f app/Dockerfile .` | Builds the API image |
+
+## Rules
+
+- The core never imports a battery, the app, GORM, a database driver, a config loader or a logger other than `log/slog`.
+- A battery imports at most the core and its own integration, never the app or another battery.
+- Never run `go work sync`: it raises every module's dependencies to the highest version any of them uses.
+- Generated code (`app/internal/database/sqlc`, `app/api/docs`) is regenerated, never edited.
+- Migrations are additive and never run on API startup.
+- Every error a client can see is an `apperr` error declared in an `errors.go`, with a `domain.rule` code. Causes go in `WithCause` and reach the log, never the response.
+- Business code never imports `httperr` or chooses an HTTP status: it picks a `Kind`, and the edge maps it.
+- Logging is `log/slog`, built once in `container.go` and passed down.
+- Register global middleware before any route: Gin does not apply `Use` to routes that already exist.
+- Repository methods take `ctx` first, and driver errors (`pgx.ErrNoRows`, `pgconn.PgError`) never leave the repositories: they become the feature's errors.
+- The store never exposes the pool. Code that needs a transaction uses `WithTx`.
+- Never send `err.Error()` to a client. Declare an error for the case, or let it become `server.internal`.
+- Features depend on each other in one direction (`account` imports `user`). When two features need each other, the shared part is a third feature. Writes across features go through `store.WithTx`.
+- Every goroutine has an owner that stops and waits for it: a `job`, a `lifecycle.Server`, or a function that waits before returning.
+- Split a package by feature before it reaches about 50 files.
