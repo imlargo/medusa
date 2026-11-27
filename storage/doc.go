@@ -1,6 +1,6 @@
 // Package storage provides object storage for application files: upload,
-// download, delete, and the two ways of handing a client a link to an
-// object.
+// download, inspect, copy, list and delete objects, and hand a client a link
+// to read one or a request to upload one.
 //
 // # Getting started
 //
@@ -15,6 +15,21 @@
 //	}
 //
 //	result, err := fs.Upload(ctx, "avatars/42.png", reader, "image/png", size)
+//
+// # Uploads that skip your server
+//
+// A large file should not travel through the API on its way to the bucket.
+// [FileStorage.PresignUpload] returns a request the client sends itself:
+//
+//	req, err := fs.PresignUpload(ctx, "uploads/42.mp4", storage.PresignUploadOptions{
+//	    ContentType: "video/mp4",
+//	    Size:        size, // signed: the bucket rejects any other length
+//	})
+//	// hand req.Method, req.URL and req.Headers to the client
+//
+// When the upload is done, [FileStorage.Head] tells you what actually
+// arrived. For content this process produces or fetches without knowing its
+// size, [FileStorage.UploadStream] sends it in parts.
 //
 // # Fails at construction, not on first use
 //
