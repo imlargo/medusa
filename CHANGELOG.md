@@ -4,6 +4,10 @@ All notable changes to the Medusa core (`github.com/imlargo/medusa`). Each batte
 
 ## [Unreleased]
 
+### Added
+
+- `httpclient`: an outbound HTTP client with a timeout per attempt, a cap on the response body, retries with backoff for idempotent requests (honoring `Retry-After`), and the request ID sent on every call. A status outside 2xx is a `*StatusError`; an unreachable or overloaded service is `ErrUnavailable` (`upstream.unavailable`, 503).
+
 ## [0.1.0] - 2026-11-04
 
 The first release of Medusa as a toolkit. `v0.0.1` was an application template; it is not an earlier version of this API.

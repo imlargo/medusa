@@ -3,21 +3,20 @@ package medusa
 import (
 	"context"
 	"log/slog"
-)
 
-type requestIDContextKey struct{}
+	"github.com/imlargo/medusa/internal/reqid"
+)
 
 // WithRequestID returns ctx carrying the request ID, for code that only has a
 // context.Context: services, repositories, and the logs they write.
 // middleware.RequestID calls it for every request.
 func WithRequestID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, requestIDContextKey{}, id)
+	return reqid.With(ctx, id)
 }
 
 // RequestIDFrom returns the request ID ctx carries, or "" outside a request.
 func RequestIDFrom(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDContextKey{}).(string)
-	return id
+	return reqid.From(ctx)
 }
 
 // LogHandler wraps h so that every record logged with a request's context
