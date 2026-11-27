@@ -118,7 +118,7 @@ func (s *fileStorage) List(ctx context.Context, opts ListOptions) (*ListResult, 
 
 	in := &s3.ListObjectsV2Input{
 		Bucket:  aws.String(s.config.BucketName),
-		MaxKeys: aws.Int32(int32(limit)), //nolint:gosec // G115: limit is at most MaxListLimit
+		MaxKeys: aws.Int32(int32(limit)),
 	}
 	if opts.Prefix != "" {
 		in.Prefix = aws.String(opts.Prefix)
