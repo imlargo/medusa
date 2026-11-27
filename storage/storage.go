@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -52,6 +51,36 @@ type FileStorage interface {
 	// [MaxPresignExpiry].
 	GetPresignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 
+	// UploadStream writes reader to key without knowing its size up front,
+	// reading it in parts of [StreamPartSize] and never holding more than one
+	// part in memory. Use it for content that is produced or fetched as it is
+	// uploaded; [FileStorage.Upload] is one request cheaper when the size is
+	// known. If it fails, the parts already sent are discarded.
+	UploadStream(ctx context.Context, key string, reader io.Reader, contentType string) (*FileResult, error)
+
+	// PresignUpload returns a request that writes key straight to the bucket,
+	// for a client that holds no credentials: a browser, or another service.
+	// The client must send it exactly as returned, method and headers
+	// included.
+	PresignUpload(ctx context.Context, key string, opts PresignUploadOptions) (*PresignedRequest, error)
+
+	// Head returns an object's metadata without its content. A missing
+	// object is an error for which [IsNotFound] is true.
+	Head(ctx context.Context, key string) (*ObjectInfo, error)
+
+	// Exists reports whether key holds an object.
+	Exists(ctx context.Context, key string) (bool, error)
+
+	// Copy copies the object at sourceKey to destinationKey inside the
+	// bucket, replacing what is there. The provider does the copy; the
+	// content does not pass through this process. One call copies at most
+	// 5 GiB.
+	Copy(ctx context.Context, sourceKey, destinationKey string) error
+
+	// List returns one page of the objects whose keys start with
+	// opts.Prefix, in key order.
+	List(ctx context.Context, opts ListOptions) (*ListResult, error)
+
 	// GetPublicURL returns the URL at which key is served if the bucket (or
 	// [Config.PublicDomain]) makes it publicly readable. It does not check
 	// that the object exists or that the bucket is actually public — it
@@ -62,21 +91,29 @@ type FileStorage interface {
 // s3API is the subset of *s3.Client this package calls. Depending on this
 // rather than on *s3.Client directly is what makes fileStorage testable
 // without a network, and incidentally makes it usable against anything
-// wire-compatible with these five calls.
+// wire-compatible with these calls.
 type s3API interface {
 	PutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	GetObject(ctx context.Context, in *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 	DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
 	DeleteObjects(ctx context.Context, in *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 	HeadBucket(ctx context.Context, in *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error)
+	HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+	CopyObject(ctx context.Context, in *s3.CopyObjectInput, optFns ...func(*s3.Options)) (*s3.CopyObjectOutput, error)
+	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	CreateMultipartUpload(ctx context.Context, in *s3.CreateMultipartUploadInput, optFns ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error)
+	UploadPart(ctx context.Context, in *s3.UploadPartInput, optFns ...func(*s3.Options)) (*s3.UploadPartOutput, error)
+	CompleteMultipartUpload(ctx context.Context, in *s3.CompleteMultipartUploadInput, optFns ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error)
+	AbortMultipartUpload(ctx context.Context, in *s3.AbortMultipartUploadInput, optFns ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error)
 }
 
-// presignAPI is the one presigning call this package uses. It is separate
+// presignAPI is the presigning calls this package uses. It is separate
 // from s3API because *s3.PresignClient, unlike the calls above, is not
 // something a fake can implement by satisfying *s3.Client's own shape — the
 // real SDK wraps a client to build one.
 type presignAPI interface {
 	PresignGetObject(ctx context.Context, in *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4signer.PresignedHTTPRequest, error)
+	PresignPutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4signer.PresignedHTTPRequest, error)
 }
 
 type fileStorage struct {
@@ -159,7 +196,7 @@ func (s *fileStorage) Upload(ctx context.Context, key string, reader io.Reader, 
 		Key:         key,
 		Size:        size,
 		ContentType: contentType,
-		ETag:        strings.Trim(aws.ToString(out.ETag), `"`),
+		ETag:        unquoteETag(out.ETag),
 	}
 
 	if s.config.UsePublicURL {
@@ -296,11 +333,9 @@ func (s *fileStorage) GetPresignedURL(ctx context.Context, key string, expiry ti
 	if err := ValidateKey(key); err != nil {
 		return "", err
 	}
-	switch {
-	case expiry <= 0:
-		expiry = DefaultPresignExpiry
-	case expiry > MaxPresignExpiry:
-		return "", fmt.Errorf("storage: requested expiry %v exceeds the %v a presigned URL can carry", expiry, MaxPresignExpiry)
+	expiry, err := presignExpiry(expiry)
+	if err != nil {
+		return "", err
 	}
 
 	out, err := s.presigner.PresignGetObject(ctx, &s3.GetObjectInput{

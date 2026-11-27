@@ -4,6 +4,18 @@ All notable changes to `github.com/imlargo/medusa/storage`. The format follows [
 
 ## [Unreleased]
 
+### Added
+
+- `PresignUpload`: a presigned PUT, with the content type and the exact size signed into it, for uploads that go from a browser or another service straight to the bucket.
+- `UploadStream`: uploads a reader of unknown size in parts of `StreamPartSize`, and discards the parts if it fails.
+- `Head` and `Exists`: an object's size, content type, ETag and last modification, without its content.
+- `Copy`: a copy inside the bucket, done by the provider.
+- `List`: the objects under a prefix, paged with a cursor.
+
+### Changed
+
+- **Breaking for implementations of `FileStorage`:** the interface has the six methods above. Code that only calls it is not affected; a fake or a wrapper of your own has to add them.
+
 ## [0.1.0] - 2026-11-04
 
 ### Added

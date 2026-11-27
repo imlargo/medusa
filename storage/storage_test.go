@@ -33,6 +33,20 @@ type fakeS3 struct {
 	deleteObjectsErr error
 
 	headErr error
+
+	headObjectOut *s3.HeadObjectOutput
+	headObjectErr error
+
+	copyIn *s3.CopyObjectInput
+
+	listIn  *s3.ListObjectsV2Input
+	listOut *s3.ListObjectsV2Output
+
+	createIn      *s3.CreateMultipartUploadInput
+	partSizes     []int64 // one per UploadPart call, in order
+	failPart      int32   // the part number UploadPart fails on; 0 for none
+	completeIn    *s3.CompleteMultipartUploadInput
+	abortedUpload string
 }
 
 func (f *fakeS3) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
@@ -82,6 +96,7 @@ func (f *fakeS3) HeadBucket(_ context.Context, _ *s3.HeadBucketInput, _ ...func(
 
 // fakePresigner is a hand-rolled presignAPI.
 type fakePresigner struct {
+	putIn     *s3.PutObjectInput
 	gotExpiry time.Duration
 	url       string
 	err       error
