@@ -62,6 +62,15 @@ Then the rest of phase 1 that needed no decision, and more batteries (2026-11-04
 - Migrations take a lock, and `pgtest` clones a migrated template.
 - An end-to-end account flow test runs against Postgres in CI.
 
+Then the first work for Butter's backend, Medusa's first consumer (2026-11-27):
+
+- The roadmap lists the twelve gaps an audit against Butter's design found, with their order and issues (#22 to #33).
+- `storage`: presigned uploads, stream uploads, `Head`, `Exists`, `Copy`, `List`.
+- `httpclient` in the core.
+- Go 1.27.4 for a `net/http` advisory.
+
+Both are on `main` under Unreleased in their changelogs: `storage/v0.2.0` and the core `v0.2.0` are not tagged yet.
+
 ## What's next
 
 The phases, open items, pending decisions and how the work runs are in [docs/roadmap.md](docs/roadmap.md). Phase 0 is done. `main` only takes PRs whose `ci` check passed, and a module is released by its tag (see Release a module in AGENTS.md). Next are the decisions D1-D7, which unblock the auth battery, the `api` battery and the `queue` battery.
