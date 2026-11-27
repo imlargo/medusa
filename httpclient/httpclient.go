@@ -298,7 +298,7 @@ func (c *Client) backoffFor(attempt int) time.Duration {
 	if wait <= 0 {
 		return 0
 	}
-	return wait - rand.N(wait/2+1)
+	return wait - rand.N(wait/2+1) //nolint:gosec // G404: jitter spreads retries out, it guards nothing
 }
 
 func newStatusError(req *http.Request, resp *http.Response) *StatusError {
