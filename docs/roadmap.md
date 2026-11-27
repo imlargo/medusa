@@ -46,9 +46,9 @@ Butter's backend is being designed on Medusa as three deployables: `api` (HTTP, 
 | Order | Gap | Items | Issue |
 |---|---|---|---|
 | a | A job queue with a `worker` entrypoint | 2.4, 4.1 | #22 |
-| a | Presigned uploads, streams, head, copy and list in `storage` | 2.11 | #23 |
+| a | Presigned uploads, streams, head, copy and list in `storage` (done) | 2.11 | #23 |
 | a | The caller in `context.Context`, scopes, access and refresh tokens | 1.1, 1.5, 2.3 | #24 |
-| a | An outbound HTTP client | 2.6 | #25 |
+| a | An outbound HTTP client (done) | 2.6 | #25 |
 | b | Service-to-service auth: keys per client, signed callbacks | 2.12 | #26 |
 | b | Inbound webhooks verified and stored before processing | 2.9 | #27 |
 | b | Observability beyond HTTP | 3.3, 3.5 | #28 |
@@ -99,12 +99,12 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 | 2.3 | **Auth battery v1**, split so heavy dependencies stay opt-in. Needs D1, D2, D6. `auth/oidc` is its own module. **Never built:** an authorization server or OIDC provider, SAML, SCIM, our own crypto, or a user admin UI. Apps that need SSO or share one login across apps use an IdP (Zitadel, Ory, Keycloak) and only the verifier. | L | 1.5 |
 | 2.4 | **`queue` battery**: Postgres jobs enqueued in the same transaction as the write that causes them, with leases, retries with backoff, a visible failed state, concurrency per queue, and metrics for depth, age and wait. The app template gains `cmd/worker`. On River, or written here on `SKIP LOCKED`: needs D7. | L | |
 | 2.5 | **`redis` battery**: client from a URL with a health check, cache helpers (`Get`/`Set`/`Delete`, `Remember` with single flight) and pub/sub. The app's `database/redis.go` moves here. It is what 4.2, 4.3 and 4.5 build on. | M | |
-| 2.6 | **`httpclient`** (core, standard library only): outbound client with a timeout and `ctx` always, capped bodies, status errors as `apperr`, retries only for idempotent requests, and the request ID sent on every call. | M | |
+| 2.6 | **`httpclient`** (core, standard library only): outbound client with a timeout and `ctx` always, capped bodies, status errors as `apperr`, retries only for idempotent requests, and the request ID sent on every call. Done, unreleased. | M | |
 | 2.7 | **`storage` out of the core** into its own battery, so an API without object storage stops downloading the AWS SDK. Breaking for the core. Done. | S | |
 | 2.8 | **Test kit**: `pgtest` starts a Postgres container (testcontainers-go) when `TEST_DATABASE_URL` is empty, and clones a migrated template database instead of migrating per test. Migrations take goose's session lock. Done but the container, which adds a dependency. | M | |
 | 2.9 | **`webhook`**: signed delivery out and verification in, on the Standard Webhooks spec, delivered as `queue` jobs. Inbound webhooks (Stripe, cal.com, a posting provider) are verified and stored before they are processed, so a failed handler is retried from the stored event. | M | 2.4 |
 | 2.10 | **`mail`**: a `Sender` interface, SMTP (wneessen/go-mail) and a development sender that logs, sent as `queue` jobs. | S | 2.4 |
-| 2.11 | **`storage` for uploads that skip the API**: presigned PUT, upload of a stream of unknown size (multipart), `Head` and `Exists`, `Copy`, `List` by prefix. Presigned multipart for browsers follows if a single PUT (5 GiB) is not enough. | M | |
+| 2.11 | **`storage` for uploads that skip the API**: presigned PUT, upload of a stream of unknown size (multipart), `Head` and `Exists`, `Copy`, `List` by prefix. Presigned multipart for browsers follows if a single PUT (5 GiB) is not enough. Done, unreleased. | M | |
 | 2.12 | **Service-to-service auth**: API keys per client (a key store, not one static key) with the client as the `Principal`, and signed callbacks between services (HMAC over the body with a timestamp, the Standard Webhooks scheme of 2.9). | M | 1.5 |
 | 2.13 | **`events`: a transactional outbox with several consumers per event.** A fact is written in the same transaction as the change; a dispatcher delivers it at least once to each registered handler, retried independently and idempotent by event and handler. On top of `queue`. | L | 2.4 |
 | 2.14 | **Module boundaries at scale**: each feature owns its tables, queries and migrations (one sqlc package per feature, no single `store.Store` that imports them all), with a lint rule that fails a feature importing another's storage. | L | |
