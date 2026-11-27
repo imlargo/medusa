@@ -69,7 +69,9 @@ Then the first work for Butter's backend, Medusa's first consumer (2026-11-27):
 - `httpclient` in the core.
 - Go 1.27.4 for a `net/http` advisory.
 
-Both are on `main` under Unreleased in their changelogs: `storage/v0.2.0` and the core `v0.2.0` are not tagged yet.
+Released as the core `v0.2.0` and `storage/v0.2.0`.
+
+Decided on 2026-11-27: the queue is written in Medusa on `SKIP LOCKED` (D7), and auth v1 ships password and OIDC logins with opaque, rotating refresh tokens (D1, D6).
 
 ## What's next
 
