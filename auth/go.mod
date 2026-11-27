@@ -2,7 +2,7 @@ module github.com/imlargo/medusa/auth
 
 go 1.27.0
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 // v0.1.0 was tagged before auth required a released core: its go.mod
 // requires github.com/imlargo/medusa v0.0.0, which does not exist.
