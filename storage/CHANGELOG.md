@@ -4,6 +4,8 @@ All notable changes to `github.com/imlargo/medusa/storage`. The format follows [
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-27
+
 ### Added
 
 - `PresignUpload`: a presigned PUT, with the content type and the exact size signed into it, for uploads that go from a browser or another service straight to the bucket.
@@ -22,5 +24,6 @@ All notable changes to `github.com/imlargo/medusa/storage`. The format follows [
 
 - S3-compatible object storage (Cloudflare R2 by default): upload, download, presigned URLs, bulk delete, and key validation. Moved out of the core so APIs without object storage do not download the AWS SDK.
 
-[Unreleased]: https://github.com/imlargo/medusa/compare/storage/v0.1.0...HEAD
+[Unreleased]: https://github.com/imlargo/medusa/compare/storage/v0.2.0...HEAD
+[0.2.0]: https://github.com/imlargo/medusa/releases/tag/storage/v0.2.0
 [0.1.0]: https://github.com/imlargo/medusa/releases/tag/storage/v0.1.0
