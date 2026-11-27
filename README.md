@@ -25,6 +25,7 @@ Requires Go 1.27. Each module has its own `CHANGELOG.md` and releases (`v0.1.0` 
 | `lifecycle` | Runs servers, start and stop hooks, and shuts down on SIGINT/SIGTERM | no |
 | `job` | Periodic background work managed by `lifecycle`: no overlapping runs, panics contained, cancelled and awaited on shutdown | no |
 | `metrics` | HTTP request counters and histograms in Prometheus | no |
+| `httpclient` | Calls to other services: timeout, capped bodies, retries only for idempotent requests, the request ID sent along, failures as application errors | no |
 
 ## Batteries
 

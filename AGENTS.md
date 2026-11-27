@@ -49,6 +49,7 @@ Core:
 | `job` | `Every(name, interval, fn, opts...)`: periodic background work, run and stopped by `lifecycle` |
 | `lifecycle` | `New(opts...).Run(ctx)`: runs servers and hooks, stops on SIGINT/SIGTERM |
 | `metrics` | `NewHTTP(registry)`: Prometheus request metrics |
+| `httpclient` | `New(opts...)`, `Do`, `JSON`: outbound calls with a timeout, a body cap, safe retries, the request ID sent along; `StatusError`, `ErrUnavailable` |
 
 Batteries:
 
@@ -203,5 +204,6 @@ Every module (the core and each battery) is versioned and released on its own, w
 - The store never exposes the pool. Code that needs a transaction uses `WithTx`.
 - Never send `err.Error()` to a client. Declare an error for the case, or let it become `server.internal`.
 - Features depend on each other in one direction (`account` imports `user`). When two features need each other, the shared part is a third feature. Writes across features go through `store.WithTx`.
+- Calls to other services go through `httpclient`, one client per service, never `http.DefaultClient`: it has no timeout. A dependency's rejection (`*httpclient.StatusError`) is handled where it is made or it becomes a 500; never forward a dependency's status or body to a client.
 - Every goroutine has an owner that stops and waits for it: a `job`, a `lifecycle.Server`, or a function that waits before returning.
 - Split a package by feature before it reaches about 50 files.
