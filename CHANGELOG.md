@@ -6,6 +6,7 @@ All notable changes to the Medusa core (`github.com/imlargo/medusa`). Each batte
 
 ### Added
 
+- `webhook`: signing and verification of webhooks and callbacks between services, on the Standard Webhooks scheme (`Signer`, `Verifier` with a replay tolerance and several secrets for rotation), and `HMAC` for a provider that signs the body into one header. A refused message is `webhook.invalid_signature`.
 - `metrics.NewJobs`: Prometheus metrics for background jobs. `ObserveRun` records how long a job waited and ran and how it ended; the queues' depth, failed count and oldest ready age are read at scrape time through a function, so the package depends on no queue.
 
 ## [0.2.0] - 2026-11-27
