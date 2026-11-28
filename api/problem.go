@@ -78,7 +78,7 @@ const (
 // details to the errors Medusa already declares, so a client sees one
 // vocabulary whichever layer refused it.
 func newProblem(ctx huma.Context, status int, msg string, errs ...error) huma.StatusError {
-	var requestContext context.Context = context.Background()
+	requestContext := context.Background()
 	if ctx != nil {
 		requestContext = context.WithValue(ctx.Context(), ginContextKey{}, humagin.Unwrap(ctx))
 	}
@@ -118,7 +118,7 @@ func fieldErrors(errs []error) []apperr.FieldError {
 			continue
 		}
 
-		detailer, ok := err.(huma.ErrorDetailer) //nolint:errorlint // Huma hands over its own detail values, unwrapped
+		detailer, ok := err.(huma.ErrorDetailer)
 		if !ok {
 			fields = append(fields, apperr.FieldError{Message: err.Error()})
 			continue
