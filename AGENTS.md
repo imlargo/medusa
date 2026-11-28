@@ -9,9 +9,9 @@ There are two things in this repo, Medusa and an app built on it, and the whole 
 | | Medusa core | Medusa batteries | The app |
 |---|---|---|---|
 | What | A toolkit for HTTP APIs on Gin | Ready-made pieces most APIs need, opt-in | One concrete API built on Medusa |
-| Where | Repository root (`/`) | `api/`, `auth/`, `env/`, `postgres/`, `storage/` | `app/` |
+| Where | Repository root (`/`) | `api/`, `auth/`, `env/`, `postgres/`, `storage/`, `tracing/` | `app/` |
 | Module | `github.com/imlargo/medusa` | `github.com/imlargo/medusa/<battery>`, one each | `github.com/imlargo/medusa/app` |
-| Knows about | HTTP, errors, lifecycle, health, metrics | One integration each (Huma, golang-jwt, godotenv, pgx + goose, the AWS SDK) | Users, its schema, Redis, config, routes |
+| Knows about | HTTP, errors, lifecycle, health, metrics | One integration each (Huma, golang-jwt, godotenv, pgx + goose, the AWS SDK, OpenTelemetry) | Users, its schema, Redis, config, routes |
 | Imports | Never a battery or the app | The core at most, never the app | Medusa, through its public packages only |
 
 The direction is one way: **app -> batteries -> core**. If a change to Medusa needs an app type, the change belongs in the app.
@@ -67,6 +67,7 @@ Batteries:
 | `auth/password` | `New()`: `Hash` (argon2id, refuses what the policy rejects), `Verify` (also bcrypt, reports when to rehash), `Check`; errors `password.too_short`, `password.too_long`, `password.breached` |
 | `storage` | S3/R2 object storage: `NewFileStorage`, upload (sized, stream, presigned PUT), download, `Head`, `Copy`, `List`, bulk delete, key validation |
 | `api` | The API contract on Huma: `New`, `Group` (`Secured`, `Tags`), `Get`/`Post`/`Put`/`Patch`/`Delete` for `func(ctx, *In) (*Resource, error)`, `Errors`, `Status`, `Scopes`, `Empty`, `Optional[T]`, `Page`/`List[T]`/`NewList`, `Document`, `Request` |
+| `tracing` | OpenTelemetry: `Setup`, `Middleware` (requests), `Transport` (outbound calls), `QueryObserver` (statements), `Inject`/`StartJob`/`EndJob` (jobs), `LogHandler` (`trace_id` on log lines) |
 | `env` | `LoadDotEnv()`, `New()`: typed getters (`Required`, `Int`, `Duration`, `List`...) that collect every problem into `Err()` |
 
 ### App map
@@ -250,7 +251,7 @@ Medusa ships no tracker; it gives one function to call per source, each with the
 - **Requests:** `middleware.ReportErrors(func(c *medusa.Context, err error) { ... })`, before `middleware.Recover`. It is called for every error behind a 5xx response, panics included (`*middleware.PanicError` has the stack), and never for a 4xx.
 - **Jobs:** `queue.WithOnFinish(func(ctx, job, took, err) { ... })`, the same hook that feeds the metrics. A panic is a `*queue.PanicError`. Report when `job.Attempt == job.MaxAttempts` to hear of a job once, when it is given up.
 
-Inside either, `medusa.RequestIDFrom(ctx)` and `auth.PrincipalFrom(ctx)` say which request and whose. One ID follows the work: the request's ID is stored with the jobs it enqueues, set again in their handlers, and sent as `X-Request-ID` by `httpclient` and by `webhook.Signer.NewRequest`, where the next service's `RequestID` middleware adopts it.
+Inside either, `medusa.RequestIDFrom(ctx)` and `auth.PrincipalFrom(ctx)` say which request and whose, and with the `tracing` battery set up, the log line of the error carries its `trace_id`. One ID follows the work: the request's ID is stored with the jobs it enqueues, set again in their handlers, and sent as `X-Request-ID` by `httpclient` and by `webhook.Signer.NewRequest`, where the next service's `RequestID` middleware adopts it.
 
 ### Add something to Medusa
 
@@ -279,8 +280,8 @@ Every module (the core and each battery) is versioned and released on its own, w
 
 | Where | Command | Does |
 |---|---|---|
-| root | `go test ./... ./api/... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...` | Tests every module (`./...` alone is only the core) |
-| root | `go vet ./... ./api/... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...` | Vets every module |
+| root | `go test ./... ./api/... ./auth/... ./env/... ./postgres/... ./storage/... ./tracing/... ./app/...` | Tests every module (`./...` alone is only the core) |
+| root | `go vet ./... ./api/... ./auth/... ./env/... ./postgres/... ./storage/... ./tracing/... ./app/...` | Vets every module |
 | `app/` | `TEST_DATABASE_URL=postgres://... go test ./...` | Also runs the database tests (skipped without the URL) |
 | `app/` | `make run` / `make dev` | Runs the API / with hot reload |
 | `app/` | `make worker` | Runs the worker that executes queued jobs |

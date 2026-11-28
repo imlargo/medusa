@@ -4,6 +4,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -50,6 +51,9 @@ func NewWithOptions(ctx context.Context, name string, opts Options) (*App, error
 	container, err := NewContainer(ctx, cfg, opts)
 	if err != nil {
 		return nil, fmt.Errorf("initialize %s: %w", name, err)
+	}
+	if err := container.StartTracing(ctx, name); err != nil {
+		return nil, errors.Join(fmt.Errorf("initialize %s: %w", name, err), container.Close())
 	}
 
 	server := httpserver.New(

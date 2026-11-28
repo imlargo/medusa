@@ -177,6 +177,20 @@ Signing in returns two tokens with different jobs.
 - **Logout** deletes the session's tokens. The access token already issued works until it expires, which is why it is short-lived.
 - **Cleanup.** The worker deletes expired refresh tokens daily (`account.purge_sessions`).
 
+## Tracing
+
+With `OTEL_EXPORTER_OTLP_ENDPOINT` set, each process exports OpenTelemetry traces to it; without it, nothing is traced. One trace follows a piece of work across processes:
+
+| Step | Span | How it joins the trace |
+|---|---|---|
+| A request arrives | One per request, named after the route | `tracing.Middleware`; it continues a `traceparent` the caller sent |
+| It runs statements | One per statement, with its text and never its arguments | `postgres.WithQueryObserver(tracing.QueryObserver)` |
+| It enqueues a job or publishes an event | | The trace is written into the job's metadata |
+| A worker runs the job | One per run, with the run's error | `tracing.StartJob` reads the metadata; the job's statements and calls are inside it |
+| Either calls another service | One per call | `tracing.Transport` sends `traceparent` on |
+
+Every log line written with a traced context carries `trace_id` and `span_id`, next to `request_id`.
+
 ## Real-time events
 
 `GET /v1/events` streams server-sent events through `github.com/imlargo/sse`.

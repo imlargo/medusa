@@ -26,6 +26,7 @@ COPY auth/go.mod auth/go.sum ./auth/
 COPY env/go.mod env/go.sum ./env/
 COPY postgres/go.mod postgres/go.sum ./postgres/
 COPY storage/go.mod storage/go.sum ./storage/
+COPY tracing/go.mod tracing/go.sum ./tracing/
 COPY app/go.mod app/go.sum ./app/
 WORKDIR /src/app
 RUN --mount=type=cache,target=/go/pkg/mod \

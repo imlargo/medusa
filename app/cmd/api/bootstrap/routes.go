@@ -11,6 +11,7 @@ import (
 	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/auth/password"
 	"github.com/imlargo/medusa/middleware"
+	"github.com/imlargo/medusa/tracing"
 
 	"github.com/imlargo/medusa/app/internal/account"
 	"github.com/imlargo/medusa/app/internal/events"
@@ -56,7 +57,9 @@ func newRouter(c *Container) *gin.Engine {
 		c.Logger.Error("invalid trusted proxy configuration", slog.Any("error", err))
 	}
 
-	router.Use(accessLogMiddleware(c.Logger))
+	// Tracing first, so everything a request does is inside its span, and the
+	// access log line carries the trace.
+	router.Use(tracing.Middleware(c.serviceName), accessLogMiddleware(c.Logger))
 
 	registerRoutes(router, c)
 

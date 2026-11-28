@@ -64,6 +64,18 @@ type Option func(*options)
 
 type options struct {
 	logQueries bool
+	observer   QueryObserver
+}
+
+// QueryObserver is told when a statement starts and returns the context to
+// run it with and a function to call when it ends, with its error. It is how
+// tracing joins in without this module importing a tracing library; the
+// tracing battery's QueryObserver has this shape.
+type QueryObserver func(ctx context.Context, statement string) (context.Context, func(err error))
+
+// WithQueryObserver calls observe around every statement.
+func WithQueryObserver(observe QueryObserver) Option {
+	return func(o *options) { o.observer = observe }
 }
 
 // WithQueryLogging logs every statement with its arguments. Development only:
@@ -120,7 +132,7 @@ func poolConfig(url string, logger *slog.Logger, opts ...Option) (*pgxpool.Confi
 	if !strings.Contains(url, "pool_max_conn_idle_time") {
 		cfg.MaxConnIdleTime = DefaultConnMaxIdleTime
 	}
-	cfg.ConnConfig.Tracer = &queryTracer{logger: logger, verbose: o.logQueries}
+	cfg.ConnConfig.Tracer = &queryTracer{logger: logger, verbose: o.logQueries, observer: o.observer}
 
 	return cfg, nil
 }
@@ -141,26 +153,35 @@ func IsUniqueViolation(err error) bool {
 
 // queryTracer logs slow statements always, and every statement when verbose.
 type queryTracer struct {
-	logger  *slog.Logger
-	verbose bool
+	logger   *slog.Logger
+	verbose  bool
+	observer QueryObserver
 }
 
 type queryStartKey struct{}
 
 type queryStart struct {
-	at   time.Time
-	sql  string
-	args []any
+	at       time.Time
+	sql      string
+	args     []any
+	observed func(err error)
 }
 
 func (t *queryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	return context.WithValue(ctx, queryStartKey{}, queryStart{at: time.Now(), sql: data.SQL, args: data.Args})
+	start := queryStart{at: time.Now(), sql: data.SQL, args: data.Args}
+	if t.observer != nil {
+		ctx, start.observed = t.observer(ctx, data.SQL)
+	}
+	return context.WithValue(ctx, queryStartKey{}, start)
 }
 
-func (t *queryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
+func (t *queryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
 	start, ok := ctx.Value(queryStartKey{}).(queryStart)
 	if !ok {
 		return
+	}
+	if start.observed != nil {
+		start.observed(data.Err)
 	}
 
 	elapsed := time.Since(start.at)
