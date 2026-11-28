@@ -2,25 +2,33 @@ package bootstrap
 
 import (
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/api"
 	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/middleware"
 
-	apidocs "github.com/imlargo/medusa/app/api/docs"
+	"github.com/imlargo/medusa/app/internal/account"
+	"github.com/imlargo/medusa/app/internal/events"
 	"github.com/imlargo/medusa/app/internal/hosturl"
+	"github.com/imlargo/medusa/app/internal/user"
 )
 
+// apiVersion is the version of the contract in the OpenAPI document.
+const apiVersion = "1.0.0"
+
 // apiGroups are the two authorization scopes every feature registers routes
-// into. Both already carry the shared middleware stack.
+// into. Both already carry the shared middleware stack, and every route
+// registered on them is in the OpenAPI document.
 type apiGroups struct {
 	// public needs no credentials.
-	public *gin.RouterGroup
-	// protected requires a valid JWT access token.
-	protected *gin.RouterGroup
+	public *api.Group
+	// protected requires a valid JWT access token, and says so in the
+	// document.
+	protected *api.Group
 }
 
 // newRouter builds the Gin engine: router mode, global middleware and routes.
@@ -92,11 +100,15 @@ func registerRoutes(router *gin.Engine, c *Container) {
 		router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(c.MetricsRegistry, promhttp.HandlerOpts{})))
 	}
 
-	// Off by default in production: publishing the whole API surface, including
-	// endpoints not yet meant to be public, should be a decision.
-	if c.Config.Runtime.DocsEnabled {
-		registerDocs(router, apidocs.SwaggerInfo, c.Config.Server.Host, c.Config.Server.Port)
-	}
+	// The contract: every typed route below is in its OpenAPI document. The
+	// document and its page are served only when docs are enabled, which is
+	// off by default in production: publishing the whole API surface,
+	// including routes not yet meant to be public, should be a decision.
+	contract := api.New(router, "Medusa example API", apiVersion,
+		api.WithDescription("Accounts, sessions and a per-user event stream, built on Medusa."),
+		api.WithBearerAuth(),
+		api.WithDocs(c.Config.Runtime.DocsEnabled),
+	)
 
 	// Probes sit outside the API group on purpose: no auth and no rate limit, so
 	// orchestrators keep getting an answer even while the app sheds load.
@@ -112,8 +124,10 @@ func registerRoutes(router *gin.Engine, c *Container) {
 	}
 
 	groups := apiGroups{
-		public:    v1.Group(""),
-		protected: v1.Group("", auth.Middleware(c.JWT)),
+		public: contract.Group(v1),
+		// The middleware that guards the group and the scheme the document
+		// shows for it are one declaration.
+		protected: contract.Group(v1, api.Secured(api.BearerAuth, auth.Middleware(c.JWT))),
 	}
 
 	registerAccountRoutes(groups, c)
@@ -129,33 +143,62 @@ func allowedOrigins(c *Container) []string {
 }
 
 func registerAccountRoutes(g apiGroups, c *Container) {
-	public := g.public.Group("/auth")
-	public.POST("/login", medusa.Handle(c.Handlers.Account.Login))
-	public.POST("/register", medusa.HandleCreate(c.Handlers.Account.Register))
-	// Public on purpose: the refresh token is the credential of both.
-	public.POST("/refresh", medusa.Handle(c.Handlers.Account.Refresh))
-	public.POST("/logout", medusa.Handler(c.Handlers.Account.Logout))
+	h := c.Handlers.Account
 
-	protected := g.protected.Group("/auth")
-	protected.GET("/user", medusa.HandleGet(c.Handlers.Account.Me))
+	api.Post(g.public, "/auth/register", h.Register,
+		api.Summary("Create an account"),
+		api.Description("Creates an account and signs it in."),
+		api.Status(http.StatusCreated),
+		api.Errors(user.ErrEmailTaken, account.ErrPasswordTooLong),
+	)
+	api.Post(g.public, "/auth/login", h.Login,
+		api.Summary("Sign in"),
+		api.Errors(account.ErrInvalidCredentials),
+	)
+	// Public on purpose: the refresh token is the credential of both.
+	api.Post(g.public, "/auth/refresh", h.Refresh,
+		api.Summary("Refresh the session"),
+		api.Description("Trades a refresh token for a new access token and a new refresh token. The old refresh token stops working; using it again ends the session."),
+		api.Errors(auth.ErrInvalidRefreshToken),
+	)
+	api.Post(g.public, "/auth/logout", h.Logout,
+		api.Summary("Sign out"),
+		api.Description("Ends the session of a refresh token, on every device that holds a token of it. Signing out twice is not an error."),
+	)
+
+	api.Get(g.protected, "/auth/user", h.Me,
+		api.Summary("The signed-in user"),
+		api.Errors(auth.ErrInvalidToken, user.ErrNotFound),
+	)
 }
 
 func registerEventRoutes(g apiGroups, c *Container) {
-	// The stream authenticates itself: the sse Authorizer reads the token off
-	// the raw request so it can both identify the caller and scope their topics,
-	// which the gin middleware cannot do. Hence public here, not unauthenticated.
-	g.public.GET("/events", c.Handlers.Events.Stream())
+	h := c.Handlers.Events
 
-	g.protected.POST("/events/publish", medusa.HandleCreate(c.Handlers.Events.Publish))
+	// The stream is a plain Gin handler: it never finishes, and it
+	// authenticates itself, because the sse Authorizer reads the token off
+	// the raw request to both identify the caller and scope their topics.
+	// Hence public here, not unauthenticated. Document lists it.
+	g.public.Router().GET("/events", h.Stream())
+	api.Document(g.public, http.MethodGet, "/events",
+		api.Summary("Stream of the signed-in user's events"),
+		api.Description("Server-sent events. Send the access token as a Bearer header, or as the access_token query parameter where headers cannot be set."),
+	)
+
+	api.Post(g.protected, "/events/publish", h.Publish,
+		api.Summary("Publish an event to your own stream"),
+		api.Status(http.StatusCreated),
+		api.Errors(auth.ErrInvalidToken, events.ErrPublishFailed),
+	)
 }
 
 // Template for adding a new feature:
 //
 //	func registerProductRoutes(g apiGroups, c *Container) {
-//	    products := g.protected.Group("/products")
-//	    products.GET("", medusa.HandleGet(c.Handlers.Product.List))
-//	    products.GET("/:id", medusa.HandleGet(c.Handlers.Product.Get))
-//	    products.POST("", medusa.HandleCreate(c.Handlers.Product.Create))
-//	    products.PUT("/:id", medusa.HandleUpdate(c.Handlers.Product.Update))
-//	    products.DELETE("/:id", medusa.HandleDelete(c.Handlers.Product.Delete))
+//	    h := c.Handlers.Product
+//	    api.Get(g.protected, "/products", h.List)
+//	    api.Get(g.protected, "/products/{id}", h.Get, api.Errors(product.ErrNotFound))
+//	    api.Post(g.protected, "/products", h.Create, api.Status(http.StatusCreated))
+//	    api.Patch(g.protected, "/products/{id}", h.Update, api.Errors(product.ErrNotFound))
+//	    api.Delete(g.protected, "/products/{id}", h.Delete, api.Errors(product.ErrNotFound))
 //	}

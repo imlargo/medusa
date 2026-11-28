@@ -101,7 +101,7 @@ Routes outside `/v1` are deliberately free of auth and rate limiting:
 
 - `/health` and `/ready` keep answering orchestrators while the app sheds load.
 - `/metrics` is only registered when metrics are enabled. It should be restricted at the network layer.
-- `/docs` is served only when docs are enabled, which is off by default in production.
+- `/docs` and `/openapi.json` are served only when docs are enabled, which is off by default in production. The document is OpenAPI 3.1, built by the `api` battery from the routes as they are registered (ADR 0008): the types that bind and validate a request are the ones that document it.
 
 Inside a route, a `medusa.Handle*` adapter:
 

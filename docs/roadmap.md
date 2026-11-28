@@ -33,8 +33,7 @@ What still stands between it and large production use, in order:
 
 1. No tracing (3.3). Request IDs already reach every log line (3.2).
 2. Per-process state: rate limits and SSE (phase 4).
-3. Routes are documented by swag comments that drift (2.1).
-4. Passwords are hashed with bcrypt and have no policy (1.2, D2).
+3. Passwords are hashed with bcrypt and have no policy (1.2, D2).
 
 Closed since the review: access and refresh tokens told apart (1.1), the caller in the context with scopes (1.5), a job queue (2.4), shutdown coordinated with readiness (1.6), a deadline on every request (1.7), secure headers (1.8), the error catalog (1.4), and `storage` and `env` as batteries (2.7, 2.2).
 
@@ -54,7 +53,7 @@ Butter's backend is being designed on Medusa as three deployables: `api` (HTTP, 
 | c | Events through a transactional outbox (done) | 2.13 | #29 |
 | c | More than one replica: `redis`, rate limits, SSE, websockets | 2.5, 4.2, 4.3, 4.5 | #30 |
 | c | Module boundaries at scale (done) | 2.14 | #31 |
-| c | The API contract: typed input, idempotency, cursors, docs | 2.1, 5.1, 5.2, 5.3 | #32 |
+| c | The API contract: typed input, cursors, docs (done); stored idempotency results (open) | 2.1, 5.1, 5.2, 5.3 | #32 |
 | c | Feature flags and mail | 2.15, 2.10 | #33 |
 
 Order a is what nothing can be built without. Order b is built with the engine as first consumer: it is small, has its own database and needs no user auth. Order c is built with Butter's `api` and `worker`.
@@ -93,7 +92,7 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 
 | ID | Item | Size | Depends on |
 |---|---|---|---|
-| 2.1 | **`api` battery: typed operations, FastAPI style.** One input struct (path, query, header and body tags) drives binding, validation, OpenAPI 3.1 served at startup, security schemes and the error responses. Built on Huma through its Gin adapter, so Gin stays the router and routes move one at a time; `apperr` renders through Huma's error hook. Replaces swag and `make docs`. Routes answer with the resource itself, without the `{success, message, data}` envelope (decided 2026-11-28). | L | 1.4 |
+| 2.1 | **`api` battery: typed operations, FastAPI style.** One input struct (path, query, header and body tags) drives binding, validation, OpenAPI 3.1 served at startup, security schemes and the error responses. Built on Huma through its Gin adapter, so Gin stays the router and routes move one at a time; `apperr` renders through Huma's error hook. Replaces swag and `make docs`. Routes answer with the resource itself, without the `{success, message, data}` envelope (decided 2026-11-28). Done as the `api` battery (ADR 0008), unreleased. | L | 1.4 |
 | 2.2 | **`env`** (named so it does not clash with the app's `config`): env loading with a `.env` fallback, typed getters, one error listing every problem. Extracted from `app/internal/config`. `cmd/migrate` stops needing `JWT_SECRET`. Done. | M | |
 | 2.3 | **Auth battery v1**, split so heavy dependencies stay opt-in. Needs D1, D2, D6. `auth/oidc` is its own module. **Never built:** an authorization server or OIDC provider, SAML, SCIM, our own crypto, or a user admin UI. Apps that need SSO or share one login across apps use an IdP (Zitadel, Ory, Keycloak) and only the verifier. | L | 1.5 |
 | 2.4 | **`queue` battery**: Postgres jobs enqueued in the same transaction as the write that causes them, with leases, retries with backoff, a visible failed state, concurrency per queue, and metrics for depth, age and wait. The app template gains `cmd/worker`. Written here on `SKIP LOCKED` with lease tokens (D7, ADR 0004), not on River. Done as `postgres/queue` with cron schedules, `Failed`/`Retry` and Prometheus metrics (`postgres/v0.2.0`; `metrics.NewJobs` is in the core, unreleased). | L | |
@@ -148,9 +147,9 @@ From "a set of packages" to "an app in 30 lines of `main`".
 
 | ID | Item | Size | Depends on |
 |---|---|---|---|
-| 5.1 | **Cursor pagination**: opaque cursors next to page/offset | M | |
-| 5.2 | **`Idempotency-Key`** for unsafe methods, results stored in Postgres first | L | |
-| 5.3 | **Binding beyond the JSON body**: one typed input for path, query, header and body in the `Handle` adapters. Comes with 2.1, on Huma (D3). | M | 2.1 |
+| 5.1 | **Cursor pagination**: opaque cursors next to page/offset. Done in `api`: `Page`, `List`, `NewList`. | M | |
+| 5.2 | **`Idempotency-Key`** for unsafe methods, results stored in Postgres first. The header is documented with `api.Idempotent`; storing and replaying results is not built. | L | |
+| 5.3 | **Binding beyond the JSON body**: one typed input for path, query, header and body in the `Handle` adapters. Comes with 2.1, on Huma (D3). Done. | M | 2.1 |
 
 ### Phase 6: Tooling and adoption
 

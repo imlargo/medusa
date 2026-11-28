@@ -16,6 +16,7 @@ Every error the API answers with, as the `code` of its RFC 9457 problem. Generat
 | `auth.missing_credentials` | 401 | unauthenticated | the authorization header is missing |
 | `events.publish_failed` | 500 | internal | could not publish the event |
 | `request.body_too_large` | 413 | too_large | the request body is too large |
+| `request.invalid_cursor` | 400 | invalid | the cursor is not valid: start again without one |
 | `request.invalid_parameter` | 400 | invalid | a path or query parameter is invalid |
 | `request.malformed_body` | 400 | invalid | the request body could not be parsed |
 | `request.rate_limited` | 429 | resource_exhausted | rate limit exceeded |

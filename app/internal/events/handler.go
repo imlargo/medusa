@@ -3,6 +3,7 @@
 package events
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -84,34 +85,36 @@ func (h *Handler) authorize(r *http.Request) (sse.Grant, error) {
 	return grant, nil
 }
 
-// Publish sends a notification to one user: POST /v1/events/publish
+// PublishInput is the input of a publish call.
+type PublishInput struct {
+	Body struct {
+		Event string `json:"event" minLength:"1" doc:"The name of the event, as the stream reports it"`
+		Data  any    `json:"data" doc:"The event's payload"`
+	}
+}
+
+// Published reports where an event landed in the log.
+type Published struct {
+	Offset uint64 `json:"offset"`
+}
+
+// Publish sends a notification to the signed-in user's own stream.
 //
-// It exists to make the endpoint above easy to try out; a real application would
+// It exists to make the stream easy to try out; a real application would
 // publish from the service that owns the event, not from an HTTP handler.
-func (h *Handler) Publish(ctx *medusa.Context, in *PublishEventRequest) (*PublishEventResponse, error) {
+func (h *Handler) Publish(ctx context.Context, in *PublishInput) (*Published, error) {
 	userID, ok := auth.SubjectFrom[int64](ctx)
 	if !ok {
 		// Only reachable if the route is registered without auth.Middleware.
 		return nil, medusa.ErrMissingCredentials
 	}
 
-	offset, err := h.broker.Publish(ctx.Ctx(), UserTopic(userID, "notifications"), in.Data, sse.Name(in.Event))
+	offset, err := h.broker.Publish(ctx, UserTopic(userID, "notifications"), in.Body.Data, sse.Name(in.Body.Event))
 	if err != nil {
 		return nil, ErrPublishFailed.WithCause(err)
 	}
 
-	return &PublishEventResponse{Offset: uint64(offset)}, nil
-}
-
-// PublishEventRequest is the body of a publish call.
-type PublishEventRequest struct {
-	Event string `json:"event" binding:"required"`
-	Data  any    `json:"data"  binding:"required"`
-}
-
-// PublishEventResponse reports where the event landed in the log.
-type PublishEventResponse struct {
-	Offset uint64 `json:"offset"`
+	return &Published{Offset: uint64(offset)}, nil
 }
 
 // bearerToken reads the token from the Authorization header, falling back to an

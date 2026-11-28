@@ -5,6 +5,7 @@ Medusa is a set of small Go packages for building HTTP APIs on Gin. The core doe
 ```sh
 go get github.com/imlargo/medusa            # core
 go get github.com/imlargo/medusa/postgres   # battery: pgx pool, goose migrations, test databases
+go get github.com/imlargo/medusa/api        # battery: typed routes and OpenAPI 3.1, on Huma
 go get github.com/imlargo/medusa/auth       # battery: JWT and its middleware
 go get github.com/imlargo/medusa/env        # battery: typed environment variables
 go get github.com/imlargo/medusa/storage    # battery: S3-compatible object storage
@@ -39,6 +40,7 @@ Each is its own module, with its own dependencies and versions. Choosing one is 
 | `postgres/events` | Events to several consumers through the queue: published in the writer's transaction, one retried delivery per subscriber | (same module) |
 | `postgres/queue` | A job queue: enqueued in the caller's transaction, claimed with leases, retried, periodic jobs once per cluster | (same module) |
 | `auth` | The caller as a `Principal` in the context: bearer tokens (`JWT[S]`) and API keys per client tried in order, scopes with `Require`, the tenant per request with `Enrich` | golang-jwt v5 |
+| `api` | The API contract, FastAPI style: one typed input per route drives binding, validation, OpenAPI 3.1 and the documented errors; resources answered without an envelope | Huma v2 |
 | `storage` | S3-compatible object storage (Cloudflare R2): uploads (sized, streamed, presigned), downloads, head, copy, list, bulk delete, key validation | AWS SDK v2 |
 | `env` | Typed environment variables with a `.env` fallback, reporting every problem at once | godotenv |
 
@@ -83,7 +85,7 @@ The repository holds several modules, tied together by a committed `go.work`:
 - `postgres/` and `auth/` are the batteries, `github.com/imlargo/medusa/postgres` and `github.com/imlargo/medusa/auth`.
 - [`app/`](app/README.md) is an API built on them, `github.com/imlargo/medusa/app`. It is a working application and the starting point for new ones.
 
-From the root, `go test ./... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...` checks every module against this checkout. `./...` alone stops at the nested modules.
+From the root, `go test ./... ./api/... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...` checks every module against this checkout. `./...` alone stops at the nested modules.
 
 Where new code goes, step-by-step recipes and the repo rules are in [AGENTS.md](AGENTS.md). Project status is in [context.md](context.md).
 
