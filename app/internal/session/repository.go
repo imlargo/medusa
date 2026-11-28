@@ -14,20 +14,25 @@ import (
 	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/postgres"
 
-	"github.com/imlargo/medusa/app/internal/database/sqlc"
+	"github.com/imlargo/medusa/app/internal/session/internal/db"
 )
 
 // Repository is the auth.RefreshStore of the app. A token's subject is the
 // ID of its user.
 type Repository struct {
-	queries *sqlc.Queries
+	pool postgres.Conn
 }
 
 var _ auth.RefreshStore = (*Repository)(nil)
 
-// NewRepository stores refresh tokens through queries.
-func NewRepository(queries *sqlc.Queries) *Repository {
-	return &Repository{queries: queries}
+// NewRepository stores refresh tokens in the database behind pool.
+func NewRepository(pool postgres.Conn) *Repository {
+	return &Repository{pool: pool}
+}
+
+// queries runs on the transaction ctx carries, or on the pool.
+func (r *Repository) queries(ctx context.Context) *db.Queries {
+	return db.New(postgres.ConnFrom(ctx, r.pool))
 }
 
 // Create stores token.
@@ -37,7 +42,7 @@ func (r *Repository) Create(ctx context.Context, token auth.RefreshToken) error 
 		return fmt.Errorf("create refresh token: subject %q is not a user ID", token.Subject)
 	}
 
-	err = r.queries.CreateRefreshToken(ctx, sqlc.CreateRefreshTokenParams{
+	err = r.queries(ctx).CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
 		Hash:      token.Hash,
 		Family:    token.Family,
 		Parent:    pgtype.Text{String: token.Parent, Valid: token.Parent != ""},
@@ -54,7 +59,7 @@ func (r *Repository) Create(ctx context.Context, token auth.RefreshToken) error 
 // and reports whether it already was used and how long ago, by the
 // database's clock. An unknown hash is auth.ErrRefreshTokenNotFound.
 func (r *Repository) Consume(ctx context.Context, hash string) (auth.ConsumedToken, error) {
-	row, err := r.queries.ConsumeRefreshToken(ctx, hash)
+	row, err := r.queries(ctx).ConsumeRefreshToken(ctx, hash)
 	if postgres.IsNoRows(err) {
 		return auth.ConsumedToken{}, auth.ErrRefreshTokenNotFound
 	}
@@ -77,7 +82,7 @@ func (r *Repository) Consume(ctx context.Context, hash string) (auth.ConsumedTok
 
 // RevokeFamily removes every token of family.
 func (r *Repository) RevokeFamily(ctx context.Context, family string) error {
-	if err := r.queries.DeleteRefreshTokenFamily(ctx, family); err != nil {
+	if err := r.queries(ctx).DeleteRefreshTokenFamily(ctx, family); err != nil {
 		return fmt.Errorf("revoke refresh token family: %w", err)
 	}
 	return nil
@@ -87,7 +92,7 @@ func (r *Repository) RevokeFamily(ctx context.Context, family string) error {
 // many there were. Expired tokens are already refused; this keeps the table
 // from growing forever.
 func (r *Repository) DeleteExpired(ctx context.Context) (int64, error) {
-	deleted, err := r.queries.DeleteExpiredRefreshTokens(ctx)
+	deleted, err := r.queries(ctx).DeleteExpiredRefreshTokens(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("delete expired refresh tokens: %w", err)
 	}

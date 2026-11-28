@@ -26,7 +26,9 @@ import (
 	"github.com/imlargo/medusa/app/internal/config"
 	"github.com/imlargo/medusa/app/internal/database"
 	"github.com/imlargo/medusa/app/internal/events"
+	"github.com/imlargo/medusa/app/internal/session"
 	"github.com/imlargo/medusa/app/internal/store"
+	"github.com/imlargo/medusa/app/internal/user"
 )
 
 const (
@@ -311,7 +313,7 @@ func (c *Container) buildHealthService() *health.Service {
 
 func (c *Container) buildServices() *Services {
 	return &Services{
-		Account: account.NewService(c.Store, c.JWT, c.Config.Auth.TokenExpiration, c.Config.Auth.RefreshExpiration, c.Config.Auth.RefreshReuseGrace),
+		Account: account.NewService(c.Store, user.NewRepository(c.DB), session.NewRepository(c.DB), c.JWT, c.Config.Auth.TokenExpiration, c.Config.Auth.RefreshExpiration, c.Config.Auth.RefreshReuseGrace),
 	}
 }
 

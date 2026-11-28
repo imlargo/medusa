@@ -25,7 +25,7 @@ linters:
     generated: lax
     paths:
       - app/api/docs
-      - app/internal/database/sqlc
+      - app/internal/.*/internal/db
     rules:
       # Tests build requests and files with fixed inputs on purpose.
       - path: _test\.go

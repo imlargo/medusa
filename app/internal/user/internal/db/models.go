@@ -2,21 +2,11 @@
 // versions:
 //   sqlc v1.30.0
 
-package sqlc
+package db
 
 import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type RefreshToken struct {
-	Hash      string
-	Family    string
-	UserID    int64
-	ExpiresAt pgtype.Timestamptz
-	UsedAt    pgtype.Timestamptz
-	CreatedAt pgtype.Timestamptz
-	Parent    pgtype.Text
-}
 
 type User struct {
 	ID        int64

@@ -31,7 +31,7 @@ build:
 	go build -o ./bin/migrate ./cmd/migrate
 	go build -o ./bin/worker ./cmd/worker
 
-# Regenerates internal/database/sqlc from the migrations and the queries.
+# Regenerates every feature's internal/db from its migrations and queries.
 sqlc:
 	$(DOCKER_RUN) -v "$(CURDIR):/src" -w /src $(SQLC_IMAGE) generate
 

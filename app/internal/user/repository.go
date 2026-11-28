@@ -6,24 +6,29 @@ import (
 
 	"github.com/imlargo/medusa/postgres"
 
-	"github.com/imlargo/medusa/app/internal/database/sqlc"
+	"github.com/imlargo/medusa/app/internal/user/internal/db"
 )
 
 // Repository stores accounts. It speaks the package's errors: a missing row
 // is ErrNotFound and a duplicate email ErrEmailTaken, so no driver error
 // reaches the callers.
 type Repository struct {
-	queries *sqlc.Queries
+	pool postgres.Conn
 }
 
-// NewRepository stores accounts through queries.
-func NewRepository(queries *sqlc.Queries) *Repository {
-	return &Repository{queries: queries}
+// NewRepository stores accounts in the database behind pool.
+func NewRepository(pool postgres.Conn) *Repository {
+	return &Repository{pool: pool}
+}
+
+// queries runs on the transaction ctx carries, or on the pool.
+func (r *Repository) queries(ctx context.Context) *db.Queries {
+	return db.New(postgres.ConnFrom(ctx, r.pool))
 }
 
 // Create stores a new account with an already hashed password.
 func (r *Repository) Create(ctx context.Context, email, passwordHash string) (*User, error) {
-	row, err := r.queries.CreateUser(ctx, sqlc.CreateUserParams{Email: NormalizeEmail(email), Password: passwordHash})
+	row, err := r.queries(ctx).CreateUser(ctx, db.CreateUserParams{Email: NormalizeEmail(email), Password: passwordHash})
 	if err != nil {
 		return nil, classify("create user", err)
 	}
@@ -32,7 +37,7 @@ func (r *Repository) Create(ctx context.Context, email, passwordHash string) (*U
 
 // Get returns the account with id.
 func (r *Repository) Get(ctx context.Context, id int64) (*User, error) {
-	row, err := r.queries.GetUser(ctx, id)
+	row, err := r.queries(ctx).GetUser(ctx, id)
 	if err != nil {
 		return nil, classify("get user", err)
 	}
@@ -41,7 +46,7 @@ func (r *Repository) Get(ctx context.Context, id int64) (*User, error) {
 
 // GetByEmail returns the account with email, in any letter case.
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error) {
-	row, err := r.queries.GetUserByEmail(ctx, NormalizeEmail(email))
+	row, err := r.queries(ctx).GetUserByEmail(ctx, NormalizeEmail(email))
 	if err != nil {
 		return nil, classify("get user by email", err)
 	}
@@ -50,13 +55,13 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error
 
 // Delete removes the account with id.
 func (r *Repository) Delete(ctx context.Context, id int64) error {
-	if err := r.queries.DeleteUser(ctx, id); err != nil {
+	if err := r.queries(ctx).DeleteUser(ctx, id); err != nil {
 		return classify("delete user", err)
 	}
 	return nil
 }
 
-func toUser(row sqlc.User) *User {
+func toUser(row db.User) *User {
 	return &User{
 		ID:        row.ID,
 		CreatedAt: row.CreatedAt.Time,

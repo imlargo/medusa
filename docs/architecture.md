@@ -143,11 +143,12 @@ Response shapes (a nil slice in `data` is always sent as `[]`, never `null`):
 | Concern | How |
 |---|---|
 | Connection | `pgxpool`: 25 max connections, 1 h lifetime, 10 min idle; pinged at startup |
-| Schema | goose migrations in `internal/database/migrations`, embedded in the `migrate` binary |
-| Queries | Hand-written SQL in `internal/database/queries`, compiled by sqlc into typed Go code |
+| Ownership | Each table belongs to the feature whose migrations create it, and only that feature writes it (ADR 0007). A test in CI fails on a query that writes another feature's table |
+| Schema | goose migrations in each feature's `migrations/`, merged into one history (`migrations.FS`) and embedded in the `migrate` binary |
+| Queries | Hand-written SQL in each feature's `queries/`, compiled by sqlc into that feature's `internal/db`, which no other feature can import |
 | Query logging | Every statement in development; statements over 200 ms as warnings in any environment |
 | Readiness | `/ready` pings the pool and Redis concurrently, bounded by 5 s |
-| Transactions | `store.WithTx(ctx, fn)` gives `fn` a store whose repositories share one transaction; nested calls are savepoints |
+| Transactions | `store.WithTx(ctx, fn)` gives `fn` a context that carries the transaction; every repository, job and event called with it joins, whichever feature it belongs to. Nested calls are savepoints |
 | Tests | `pgtest.New(t, migrations.FS)` creates a migrated database per test on `TEST_DATABASE_URL` and drops it afterwards |
 
 The baseline migration (`00001`) matches the table GORM created, so existing databases adopt it without changes. The schema is the single source for both goose and sqlc, so the queries are checked against it at generation time.

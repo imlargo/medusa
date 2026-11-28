@@ -10,6 +10,8 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ### Added
 
+- `Transact` and `ConnFrom`: a transaction that travels in the context, so repositories of packages that do not know each other share it. Nested, it is a savepoint.
+- `MergeMigrations` and `MustMergeMigrations`: one migration history for `Migrate` out of the migrations each feature keeps in its own package.
 - `postgres/events`: an event published in the writer's transaction (`PublishTx`) is delivered to every subscriber (`Subscribe`, `Attach`) as a job of its own, retried independently, with the same event ID on every delivery. On the queue: no outbox table, no dispatcher.
 - `queue.PanicError`: what a handler's panic becomes, with its stack, for `WithOnFinish`.
 - `queue.WithMetadata` and `Job.Metadata`: what a job records about the context it was enqueued from, such as who caused it, handed back to the handler. `Install` adds the column to an existing table.
