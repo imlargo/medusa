@@ -4,6 +4,8 @@ All notable changes to `github.com/imlargo/medusa/auth`. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-28
+
 ### Added
 
 - `Principal`: who a request acts for (kind, subject, tenant, scopes, method), carried in the request's `context.Context`. `PrincipalFrom(ctx)` and `SubjectFrom[S](ctx)` read it anywhere, and `WithPrincipal` sets it where there is no request.
@@ -32,6 +34,7 @@ All notable changes to `github.com/imlargo/medusa/auth`. The format follows [Kee
 - `JWT[S]`: HS256 tokens with a typed subject (`int64` or `string`) in the standard `sub` claim and an optional issuer.
 - `Middleware` requires a valid bearer token and answers `auth.invalid_token` otherwise; `SubjectFrom[S]` reads the subject in a handler.
 
-[Unreleased]: https://github.com/imlargo/medusa/compare/auth/v0.1.1...HEAD
+[Unreleased]: https://github.com/imlargo/medusa/compare/auth/v0.2.0...HEAD
+[0.2.0]: https://github.com/imlargo/medusa/releases/tag/auth/v0.2.0
 [0.1.1]: https://github.com/imlargo/medusa/releases/tag/auth/v0.1.1
 [0.1.0]: https://github.com/imlargo/medusa/releases/tag/auth/v0.1.0

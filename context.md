@@ -71,6 +71,15 @@ Then the first work for Butter's backend, Medusa's first consumer (2026-11-27):
 
 Released as the core `v0.2.0` and `storage/v0.2.0`.
 
+Then, for the same consumer, released on 2026-11-28 as the core `v0.3.0`, `postgres/v0.3.0` and `auth/v0.2.0`:
+
+- A job queue on Postgres with a worker, cron schedules and metrics (ADR 0004), and events on top of it (ADR 0006).
+- The caller as a `Principal` in the context, scopes, API keys per client and rotating refresh tokens (ADR 0005).
+- Signed webhooks and callbacks, error reporting hooks, one request ID from request to job to callback.
+- Each feature owns its tables, and transactions travel in the context (ADR 0007).
+
+Decided on 2026-11-28: argon2id with a minimum of 12 characters (D2), no response envelope on the `api` battery (D8), OpenTelemetry in an `otel` battery (D9).
+
 Decided on 2026-11-27: the queue is written in Medusa on `SKIP LOCKED` (D7), auth v1 ships password and OIDC logins with opaque, rotating refresh tokens (D1, D6), and the API contract is built on Huma (D3).
 
 ## What's next
