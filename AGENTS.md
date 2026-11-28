@@ -50,6 +50,7 @@ Core:
 | `job` | `Every(name, interval, fn, opts...)`: periodic background work, run and stopped by `lifecycle` |
 | `lifecycle` | `New(opts...).Run(ctx)`: runs servers and hooks, stops on SIGINT/SIGTERM |
 | `metrics` | `NewHTTP(registry)`: Prometheus request metrics; `NewJobs(registry, stats)`: job wait, duration, outcomes and queue depth |
+| `flags` | Feature flags: `New(loader)`, `Enabled(ctx, name, key)`, on for everyone, a stable percentage or a list of keys; refreshed in the background, last values kept if the loader fails |
 | `webhook` | Standard Webhooks: `NewSigner` (`Headers`, `NewRequest`), `NewVerifier` (`Verify`, secrets for rotation, tolerance); `HMAC` for a provider's own header scheme |
 | `httpclient` | `New(opts...)`, `Do`, `JSON`: outbound calls with a timeout, a body cap, safe retries, the request ID sent along; `StatusError`, `ErrUnavailable` |
 
@@ -60,6 +61,7 @@ Batteries:
 | `postgres` | `Open(ctx, url, logger, opts...)`, `Migrate(ctx, url, migrations, logger)`, `Conn`, `IsNoRows`, `IsUniqueViolation` |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh database per test, cloned from a template migrated once per set of migrations |
 | `postgres/events` | A fact to several consumers, on the queue: `PublishTx`, `NewSubscribers`, `Subscribe` (one job per subscriber, retried on its own), `Attach(worker)` |
+| `postgres/flagstore` | Feature flags in a table: `Install`, `New(conn)`, `Load`, `Set`, `Delete`. The loader of the core's `flags` |
 | `postgres/queue` | Jobs on Postgres: `Install`, `New(conn)`, `Enqueue`/`EnqueueTx`, `Worker(logger, queues)`, `Register`, `Schedule` (cron), `Periodic`, `Stats`, `Failed`, `Retry` |
 | `auth` | `Principal` in the context: `Middleware(authenticators...)`, `Enrich`, `Require(scopes...)`, `PrincipalFrom(ctx)`, `SubjectFrom[S](ctx)`; authenticators `NewJWT[S]` (`Sign`, `Parse`, `WithScopes`, `WithTenant`) and `APIKeys(lookup)`; `NewRefresher(store, ttl)` for opaque refresh tokens that rotate (`Issue`, `Rotate`, `Revoke`) over a `RefreshStore` the app implements |
 | `storage` | S3/R2 object storage: `NewFileStorage`, upload (sized, stream, presigned PUT), download, `Head`, `Copy`, `List`, bulk delete, key validation |
@@ -217,6 +219,18 @@ A fact that several features react to (an account was created, a post was publis
 A reaction runs at least once: make it safe to repeat, with `event.ID` to recognize a repeat. Release a new subscriber before the release that starts publishing its event, or deploy the workers first: a worker that does not know a subscriber does not deliver to it.
 
 Work with one known consumer stays a job (`tx.Enqueue`). What the user must see in the same response stays a function call.
+
+### Release a change behind a flag
+
+A flag turns a new code path on for some callers before all of them, and off again without a deploy.
+
+1. The name as a constant in the feature (`const FlagNewCheckout = "checkout.new_flow"`).
+2. Branch where the two paths split, on the key the rollout is by, usually the tenant or the user:
+   `if s.features.Enabled(ctx, FlagNewCheckout, tenantID) { ... }`. The same key always gets the same answer.
+3. Roll it out by changing the row, from a script or SQL: `store.Set(ctx, FlagNewCheckout, flagstore.Flag{Percentage: 10})`, or `Allow: []string{"acme"}` for named callers. Processes pick it up at their next refresh (30 s by default).
+4. When it is on for everyone, delete the flag, the `if` and the old path. A flag is temporary.
+
+A flag that is not defined is off, and so is every flag when the store has never been reachable: write the code so that off is the safe path.
 
 ### Receive a webhook, or a callback from another service
 

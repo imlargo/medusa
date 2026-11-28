@@ -4,6 +4,10 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ## [Unreleased]
 
+### Added
+
+- `postgres/flagstore`: feature flags in a table (`Install`, `Load`, `Set`, `Delete`), the store behind the core's `flags` package.
+
 ## [0.3.0] - 2026-11-28
 
 ### Fixed

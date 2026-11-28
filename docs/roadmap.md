@@ -54,7 +54,7 @@ Butter's backend is being designed on Medusa as three deployables: `api` (HTTP, 
 | c | More than one replica: `redis`, rate limits, SSE, websockets | 2.5, 4.2, 4.3, 4.5 | #30 |
 | c | Module boundaries at scale (done) | 2.14 | #31 |
 | c | The API contract: typed input, cursors, docs (done); stored idempotency results (open) | 2.1, 5.1, 5.2, 5.3 | #32 |
-| c | Feature flags and mail | 2.15, 2.10 | #33 |
+| c | Feature flags (done) and mail | 2.15, 2.10 | #33 |
 
 Order a is what nothing can be built without. Order b is built with the engine as first consumer: it is small, has its own database and needs no user auth. Order c is built with Butter's `api` and `worker`.
 
@@ -106,7 +106,7 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 | 2.12 | **Service-to-service auth**: API keys per client (a key store, not one static key) with the client as the `Principal`, and signed callbacks between services (HMAC over the body with a timestamp, the Standard Webhooks scheme of 2.9). Done: `auth.APIKeys` and `webhook.Signer`/`Verifier`. | M | 1.5 |
 | 2.13 | **`events`: a transactional outbox with several consumers per event.** A fact is written in the same transaction as the change; a dispatcher delivers it at least once to each registered handler, retried independently and idempotent by event and handler. On top of `queue`. Done as `postgres/events` (ADR 0006), unreleased. | L | 2.4 |
 | 2.14 | **Module boundaries at scale**: each feature owns its tables, queries and migrations (one sqlc package per feature, no single `store.Store` that imports them all), with a lint rule that fails a feature importing another's storage. Done (ADR 0007): the compiler refuses the import (`internal/db`), a test refuses the write, and transactions travel in the context. | L | |
-| 2.15 | **Feature flags**: evaluated per request and per job, by tenant and percentage. OpenFeature behind a small interface, or a recipe: to decide with the first flag Butter's migration needs. | S | |
+| 2.15 | **Feature flags**: evaluated per request and per job, by tenant and percentage. Done as the core's `flags` and `postgres/flagstore`, written here: Butter needs a boolean, a percentage and a list, which is less than OpenFeature's interface costs. | S | |
 
 The auth battery packages for 2.3:
 

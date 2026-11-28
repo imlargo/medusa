@@ -26,6 +26,7 @@ Requires Go 1.27. Each module has its own `CHANGELOG.md` and releases (`v0.1.0` 
 | `lifecycle` | Runs servers, start and stop hooks, and shuts down on SIGINT/SIGTERM | no |
 | `job` | Periodic background work managed by `lifecycle`: no overlapping runs, panics contained, cancelled and awaited on shutdown | no |
 | `metrics` | HTTP request counters and histograms in Prometheus | no |
+| `flags` | Feature flags by a stable percentage or a list of keys, read from a loader and kept in memory | no |
 | `webhook` | Signs and verifies webhooks and service callbacks (Standard Webhooks), and plain HMAC header schemes | no |
 | `httpclient` | Calls to other services: timeout, capped bodies, retries only for idempotent requests, the request ID sent along, failures as application errors | no |
 
@@ -38,6 +39,7 @@ Each is its own module, with its own dependencies and versions. Choosing one is 
 | `postgres` | `Open` (pool, ping, slow query log), `Migrate` (goose over any `fs.FS`), `Conn` (pool or transaction), `IsNoRows`, `IsUniqueViolation` | pgx v5, goose |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test on `TEST_DATABASE_URL` | (same module) |
 | `postgres/events` | Events to several consumers through the queue: published in the writer's transaction, one retried delivery per subscriber | (same module) |
+| `postgres/flagstore` | Feature flags in a table, changed without a deploy | (same module) |
 | `postgres/queue` | A job queue: enqueued in the caller's transaction, claimed with leases, retried, periodic jobs once per cluster | (same module) |
 | `auth` | The caller as a `Principal` in the context: bearer tokens (`JWT[S]`) and API keys per client tried in order, scopes with `Require`, the tenant per request with `Enrich` | golang-jwt v5 |
 | `api` | The API contract, FastAPI style: one typed input per route drives binding, validation, OpenAPI 3.1 and the documented errors; resources answered without an envelope | Huma v2 |

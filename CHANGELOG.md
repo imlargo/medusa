@@ -4,6 +4,10 @@ All notable changes to the Medusa core (`github.com/imlargo/medusa`). Each batte
 
 ## [Unreleased]
 
+### Added
+
+- `flags`: feature flags that are on for everyone, for a stable percentage of keys or for a list of keys. They are read from a loader, kept in memory and refreshed in the background; a loader that fails leaves the last values in use.
+
 ## [0.3.0] - 2026-11-28
 
 ### Changed
