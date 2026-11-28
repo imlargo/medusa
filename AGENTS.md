@@ -49,6 +49,7 @@ Core:
 | `job` | `Every(name, interval, fn, opts...)`: periodic background work, run and stopped by `lifecycle` |
 | `lifecycle` | `New(opts...).Run(ctx)`: runs servers and hooks, stops on SIGINT/SIGTERM |
 | `metrics` | `NewHTTP(registry)`: Prometheus request metrics; `NewJobs(registry, stats)`: job wait, duration, outcomes and queue depth |
+| `webhook` | Standard Webhooks: `NewSigner` (`Headers`, `NewRequest`), `NewVerifier` (`Verify`, secrets for rotation, tolerance); `HMAC` for a provider's own header scheme |
 | `httpclient` | `New(opts...)`, `Do`, `JSON`: outbound calls with a timeout, a body cap, safe retries, the request ID sent along; `StatusError`, `ErrUnavailable` |
 
 Batteries:
@@ -169,6 +170,16 @@ A handler returns an error to be retried later, and `queue.Permanent(err)` when 
 The worker serves `/metrics` and `/health` on `WORKER_PORT`: `jobs_ready`, `jobs_oldest_ready_seconds`, `jobs_failed`, `jobs_wait_seconds`, `jobs_run_duration_seconds` and `jobs_runs_total`, by queue and kind.
 
 `job.Every` is only for work that belongs to one process, such as refreshing a cache it holds: every replica runs it, and nothing survives a crash. Never start a goroutine with `go` for long-lived work: nobody stops it, and a panic in it kills the process.
+
+### Receive a webhook, or a callback from another service
+
+1. Verify before anything else, on the raw body: `body, id, err := verifier.Verify(ctx.Request)` with a `webhook.Verifier` (Standard Webhooks: Svix, Resend, and Medusa's own `webhook.Signer`), or `webhook.HMAC{Header: ..., Prefix: ..., Secret: ...}.Verify` for a provider that signs the body into one header. Return the error as is: it answers 401 `webhook.invalid_signature`.
+2. Store it before answering, once: enqueue a job with the raw body and `queue.Unique("<provider>:" + id)`. A redelivery finds the key taken and adds nothing.
+3. Answer 2xx. The work happens in the job's handler, which is retried from the stored body if it fails.
+
+The route is public and outside `auth.Middleware`: the signature is the credential. Never process a webhook inline in its handler: the provider times out and redelivers, and a failure loses the event.
+
+To send one: `signer.NewRequest(ctx, url, id, body)` and an `httpclient.Client`, from a job, with the same `id` on every retry.
 
 ### Add something to Medusa
 
