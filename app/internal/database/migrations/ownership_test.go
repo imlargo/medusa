@@ -92,6 +92,34 @@ func TestOnlyATablesOwnerWritesIt(t *testing.T) {
 	}
 }
 
+// rawWrite is a string in Go code that writes a table: SQL that never went
+// through sqlc, so the test above did not see it.
+var rawWrite = regexp.MustCompile("(?i)[\"`][^\"`]*\\b(insert\\s+into|update\\s+[a-z_][a-z0-9_]*\\s+set|delete\\s+from)\\b")
+
+// The ownership check reads queries/*.sql. A write passed as a string to
+// Exec in a feature's Go code would go around it, so there are none: SQL
+// lives in queries/, where it is typed, checked against the schema and
+// checked for ownership.
+func TestFeaturesWriteOnlyThroughTheirQueries(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join(featuresDir, "*", "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if match := rawWrite.Find(content); match != nil {
+			t.Errorf("%s writes a table with SQL in a string (%s...): move it to the feature's queries/", path, match)
+		}
+	}
+}
+
 // A feature's migrations only run if the feature is listed in FS. One that
 // is left out compiles, passes its unit tests on a fake, and has no tables
 // in production.

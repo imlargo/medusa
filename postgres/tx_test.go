@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"testing/fstest"
 
@@ -114,5 +115,40 @@ func TestTransactRollsBackOnAPanic(t *testing.T) {
 
 	if n, _ := repo.count(ctx); n != 0 {
 		t.Errorf("notes after a panic = %d, want 0", n)
+	}
+}
+
+// Two branches add migrations; the one with the lower version merges last.
+// Applying it would give this database an order no fresh one has, so it is
+// refused, and the deploy step fails instead of improvising.
+func TestMigrateRefusesAMigrationOlderThanTheLastApplied(t *testing.T) {
+	t.Parallel()
+
+	const first = "-- +goose Up\nCREATE TABLE a (id int);\n"
+	const merged = "-- +goose Up\nCREATE TABLE b (id int);\n"
+	const late = "-- +goose Up\nCREATE TABLE c (id int);\n"
+
+	applied := fstest.MapFS{
+		"20261128090000_a.sql": {Data: []byte(first)},
+		"20261128110000_b.sql": {Data: []byte(merged)},
+	}
+	pool := pgtest.New(t, applied)
+	url := pool.Config().ConnString()
+
+	withLate := fstest.MapFS{
+		"20261128090000_a.sql": {Data: []byte(first)},
+		"20261128100000_c.sql": {Data: []byte(late)}, // written before b, merged after it
+		"20261128110000_b.sql": {Data: []byte(merged)},
+	}
+	if err := postgres.Migrate(t.Context(), url, withLate, slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("Migrate() = nil, want an error for a pending migration older than the last applied")
+	}
+
+	var exists bool
+	if err := pool.QueryRow(t.Context(), "SELECT to_regclass('c') IS NOT NULL").Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Error("the out-of-order migration was applied")
 	}
 }
