@@ -132,6 +132,7 @@ type Worker struct {
 	started   atomic.Bool
 	stopLoops context.CancelFunc
 	stopJobs  context.CancelFunc
+	loopsDone chan struct{} // closed when no loop can claim another job
 	jobs      sync.WaitGroup
 	drainOnce sync.Once
 	mu        sync.Mutex
@@ -300,8 +301,10 @@ func (w *Worker) Start(ctx context.Context) error {
 	// interrupting what runs only when its time to finish is over.
 	jobsCtx, stopJobs := context.WithCancel(context.WithoutCancel(ctx))
 
+	loopsDone := make(chan struct{})
+
 	w.mu.Lock()
-	w.stopLoops, w.stopJobs = stopLoops, stopJobs
+	w.stopLoops, w.stopJobs, w.loopsDone = stopLoops, stopJobs, loopsDone
 	w.mu.Unlock()
 
 	w.logger.InfoContext(ctx, "queue worker started", slog.String("owner", w.owner), slog.Any("queues", map[string]int(w.queues)))
@@ -312,6 +315,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	}
 	loops.Go(func() { w.maintain(loopCtx) })
 	loops.Wait()
+	close(loopsDone)
 
 	// Reached through Stop, which is already draining, or through ctx, where
 	// nobody is: either way this returns when the drain is over.
@@ -329,13 +333,16 @@ func (w *Worker) Start(ctx context.Context) error {
 // before Start does nothing.
 func (w *Worker) Stop(ctx context.Context) error {
 	w.mu.Lock()
-	stopLoops := w.stopLoops
+	stopLoops, loopsDone := w.stopLoops, w.loopsDone
 	w.mu.Unlock()
 	if stopLoops == nil {
 		return nil
 	}
 
+	// The loops have to be gone before the running jobs are waited for: a
+	// loop still claiming could start a job after the wait began.
 	stopLoops()
+	<-loopsDone
 
 	ctx, cancel := context.WithTimeout(ctx, w.stopTimeout)
 	defer cancel()
