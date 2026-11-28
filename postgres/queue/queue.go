@@ -210,6 +210,82 @@ func (c *Client) EnqueueTx(ctx context.Context, tx postgres.Conn, kind string, p
 	return id, true, nil
 }
 
+// FailedJob is a job that ran out of attempts, as an operator sees it.
+type FailedJob struct {
+	ID        int64
+	Queue     string
+	Kind      string
+	Payload   json.RawMessage
+	Attempts  int
+	LastError string
+	FailedAt  time.Time
+}
+
+// FailedFilter selects failed jobs. Empty fields match everything.
+type FailedFilter struct {
+	Queue string
+	Kind  string
+
+	// Limit is the most jobs returned, 100 when zero.
+	Limit int
+
+	// BeforeID returns jobs older than this one, to page through a long
+	// list: pass the ID of the last job of the previous page.
+	BeforeID int64
+}
+
+// Failed lists failed jobs, newest first. A failed job stays until it is
+// retried: it is the record of work that did not happen, and for a job that
+// must not repeat, the point where a person decides.
+func (c *Client) Failed(ctx context.Context, filter FailedFilter) ([]FailedJob, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+
+	rows, err := c.conn.Query(ctx, `
+		SELECT id, queue, kind, payload, attempts, last_error, finished_at
+		FROM medusa_jobs
+		WHERE status = 'failed'
+		  AND ($1 = '' OR queue = $1)
+		  AND ($2 = '' OR kind = $2)
+		  AND ($3 = 0 OR id < $3)
+		ORDER BY id DESC
+		LIMIT $4`,
+		filter.Queue, filter.Kind, filter.BeforeID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("queue: list failed jobs: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []FailedJob
+	for rows.Next() {
+		var job FailedJob
+		if err := rows.Scan(&job.ID, &job.Queue, &job.Kind, &job.Payload, &job.Attempts, &job.LastError, &job.FailedAt); err != nil {
+			return nil, fmt.Errorf("queue: list failed jobs: %w", err)
+		}
+		jobs = append(jobs, job)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("queue: list failed jobs: %w", err)
+	}
+	return jobs, nil
+}
+
+// Retry puts a failed job back in its queue, due now, with all its attempts
+// again. It reports false when id is not a failed job: it does not exist, or
+// someone already retried it.
+func (c *Client) Retry(ctx context.Context, id int64) (bool, error) {
+	tag, err := c.conn.Exec(ctx, `
+		UPDATE medusa_jobs
+		SET status = 'queued', attempts = 0, scheduled_for = now(), finished_at = NULL
+		WHERE id = $1 AND status = 'failed'`, id)
+	if err != nil {
+		return false, fmt.Errorf("queue: retry job %d: %w", id, err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 // Stats is the state of one queue, for dashboards and alerts.
 type Stats struct {
 	Queue string

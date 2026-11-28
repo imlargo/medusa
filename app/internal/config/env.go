@@ -6,8 +6,9 @@ import "time"
 const (
 	envAppEnv = "APP_ENV"
 
-	envHost = "HOST"
-	envPort = "PORT"
+	envHost       = "HOST"
+	envPort       = "PORT"
+	envWorkerPort = "WORKER_PORT"
 
 	envDatabaseURL = "DATABASE_URL"
 	envRedisURL    = "REDIS_URL"
@@ -44,6 +45,9 @@ const (
 const (
 	defaultHost = "localhost"
 	defaultPort = 8000
+
+	// defaultWorkerPort is where the worker serves its metrics and health.
+	defaultWorkerPort = 8001
 
 	defaultJWTIssuer         = "medusa"
 	defaultTokenExpiration   = 15 * time.Minute

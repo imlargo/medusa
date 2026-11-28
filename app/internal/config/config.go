@@ -63,6 +63,9 @@ type Config struct {
 type ServerConfig struct {
 	Host string
 	Port int
+
+	// WorkerPort is where the worker process serves its metrics and health.
+	WorkerPort int
 }
 
 // DatabaseConfig points at the Postgres database.
@@ -189,8 +192,9 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Host: l.String(envHost, defaultHost),
-			Port: l.Int(envPort, defaultPort),
+			Host:       l.String(envHost, defaultHost),
+			Port:       l.Int(envPort, defaultPort),
+			WorkerPort: l.Int(envWorkerPort, defaultWorkerPort),
 		},
 		Database: DatabaseConfig{
 			URL: l.Required(envDatabaseURL),
@@ -269,6 +273,9 @@ func (c *Config) Validate() error {
 
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
 		errs = append(errs, fmt.Errorf("%s: %d is out of the valid port range 1-65535", envPort, c.Server.Port))
+	}
+	if c.Server.WorkerPort < 1 || c.Server.WorkerPort > 65535 {
+		errs = append(errs, fmt.Errorf("%s: %d is out of the valid port range 1-65535", envWorkerPort, c.Server.WorkerPort))
 	}
 
 	if c.RateLimiter.Enabled {

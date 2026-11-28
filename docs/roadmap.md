@@ -97,7 +97,7 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 | 2.1 | **`api` battery: typed operations, FastAPI style.** One input struct (path, query, header and body tags) drives binding, validation, OpenAPI 3.1 served at startup, security schemes and the error responses. Built on Huma through its Gin adapter, so Gin stays the router and routes move one at a time; `apperr` renders through Huma's error hook. Replaces swag and `make docs`. Needs D3. | L | 1.4 |
 | 2.2 | **`env`** (named so it does not clash with the app's `config`): env loading with a `.env` fallback, typed getters, one error listing every problem. Extracted from `app/internal/config`. `cmd/migrate` stops needing `JWT_SECRET`. Done. | M | |
 | 2.3 | **Auth battery v1**, split so heavy dependencies stay opt-in. Needs D1, D2, D6. `auth/oidc` is its own module. **Never built:** an authorization server or OIDC provider, SAML, SCIM, our own crypto, or a user admin UI. Apps that need SSO or share one login across apps use an IdP (Zitadel, Ory, Keycloak) and only the verifier. | L | 1.5 |
-| 2.4 | **`queue` battery**: Postgres jobs enqueued in the same transaction as the write that causes them, with leases, retries with backoff, a visible failed state, concurrency per queue, and metrics for depth, age and wait. The app template gains `cmd/worker`. Written here on `SKIP LOCKED` with lease tokens (D7, ADR 0004), not on River. Done as `postgres/queue`, unreleased; Prometheus metrics for `Stats` are still open. | L | |
+| 2.4 | **`queue` battery**: Postgres jobs enqueued in the same transaction as the write that causes them, with leases, retries with backoff, a visible failed state, concurrency per queue, and metrics for depth, age and wait. The app template gains `cmd/worker`. Written here on `SKIP LOCKED` with lease tokens (D7, ADR 0004), not on River. Done as `postgres/queue` with cron schedules, `Failed`/`Retry` and Prometheus metrics (`metrics.NewJobs`); unreleased. | L | |
 | 2.5 | **`redis` battery**: client from a URL with a health check, cache helpers (`Get`/`Set`/`Delete`, `Remember` with single flight) and pub/sub. The app's `database/redis.go` moves here. It is what 4.2, 4.3 and 4.5 build on. | M | |
 | 2.6 | **`httpclient`** (core, standard library only): outbound client with a timeout and `ctx` always, capped bodies, status errors as `apperr`, retries only for idempotent requests, and the request ID sent on every call. Done (core `v0.2.0`). | M | |
 | 2.7 | **`storage` out of the core** into its own battery, so an API without object storage stops downloading the AWS SDK. Breaking for the core. Done. | S | |
@@ -139,7 +139,7 @@ From "a set of packages" to "an app in 30 lines of `main`".
 
 | ID | Item | Size | Depends on |
 |---|---|---|---|
-| 4.1 | **Jobs that run once per cluster**: periodic jobs scheduled through the queue (2.4), so one replica claims each run. Done (`Worker.Periodic`). | M | 2.4 |
+| 4.1 | **Jobs that run once per cluster**: periodic jobs scheduled through the queue (2.4), so one replica claims each run. Done (`Worker.Schedule` for cron expressions, `Worker.Periodic` for intervals). | M | 2.4 |
 | 4.2 | **Shared rate limits**: the limiter's counters in Redis | M | 2.5 |
 | 4.3 | **SSE across replicas**: events published on one replica reach clients on every other, through Redis or Postgres `LISTEN/NOTIFY` | L | 2.5 |
 | 4.4 | **Readiness that does not take every replica out at once** on a database blip | S | |
