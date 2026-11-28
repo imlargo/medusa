@@ -4,6 +4,8 @@ All notable changes to `github.com/imlargo/medusa/api`. The format follows [Keep
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-28
+
 ### Added
 
 - `New` starts an API contract on a Gin engine, built on Huma: an OpenAPI 3.1 document made from the routes as they are registered, served with a page to browse it when `WithDocs` is on.
@@ -15,4 +17,5 @@ All notable changes to `github.com/imlargo/medusa/api`. The format follows [Keep
 - `Page`, `List[T]`, `NewList`, `EncodeCursor` and `DecodeCursor`: one cursor shape and one set of limits for every list.
 - `Document` lists a route served by a plain Gin handler, such as a stream. `Request` gives a handler the HTTP request, for a signed webhook's headers.
 
-[Unreleased]: https://github.com/imlargo/medusa/commits/main/api
+[Unreleased]: https://github.com/imlargo/medusa/compare/api/v0.1.0...HEAD
+[0.1.0]: https://github.com/imlargo/medusa/releases/tag/api/v0.1.0

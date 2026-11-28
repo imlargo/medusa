@@ -4,6 +4,8 @@ All notable changes to the Medusa core (`github.com/imlargo/medusa`). Each batte
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-28
+
 ### Added
 
 - `flags`: feature flags that are on for everyone, for a stable percentage of keys or for a list of keys. They are read from a loader, kept in memory and refreshed in the background; a loader that fails leaves the last values in use.
@@ -52,7 +54,8 @@ The first release of Medusa as a toolkit. `v0.0.1` was an application template; 
 - `job`: periodic background work owned by `lifecycle`.
 - `metrics`: Prometheus HTTP metrics on an injected registry.
 
-[Unreleased]: https://github.com/imlargo/medusa/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/imlargo/medusa/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/imlargo/medusa/releases/tag/v0.4.0
 [0.3.0]: https://github.com/imlargo/medusa/releases/tag/v0.3.0
 [0.2.0]: https://github.com/imlargo/medusa/releases/tag/v0.2.0
 [0.1.0]: https://github.com/imlargo/medusa/releases/tag/v0.1.0

@@ -4,6 +4,8 @@ All notable changes to `github.com/imlargo/medusa/tracing`. The format follows [
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-28
+
 ### Added
 
 - `Setup` starts OpenTelemetry tracing for a process and exports spans over OTLP/HTTP to the endpoint in `OTEL_EXPORTER_OTLP_ENDPOINT`. Without an endpoint nothing is traced.
@@ -12,4 +14,5 @@ All notable changes to `github.com/imlargo/medusa/tracing`. The format follows [
 - `Inject`, `StartJob` and `EndJob` carry a trace into the jobs a request enqueues.
 - `LogHandler` adds `trace_id` and `span_id` to log lines.
 
-[Unreleased]: https://github.com/imlargo/medusa/commits/main/tracing
+[Unreleased]: https://github.com/imlargo/medusa/compare/tracing/v0.1.0...HEAD
+[0.1.0]: https://github.com/imlargo/medusa/releases/tag/tracing/v0.1.0
