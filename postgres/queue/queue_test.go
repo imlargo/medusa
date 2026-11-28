@@ -40,7 +40,9 @@ func startWorker(t *testing.T, w *Worker) {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = w.Stop(stopCtx)
-		<-done
+		if err := <-done; err != nil {
+			t.Errorf("Start() = %v, want nil after Stop", err)
+		}
 	})
 }
 
@@ -401,7 +403,9 @@ func TestStopWaitsForARunningJob(t *testing.T) {
 	}
 	close(release)
 	<-stopped
-	<-done
+	if err := <-done; err != nil {
+		t.Errorf("Start() = %v, want nil after Stop", err)
+	}
 
 	if got := readJob(t, pool, id).status; got != "succeeded" {
 		t.Errorf("status = %q, want succeeded", got)

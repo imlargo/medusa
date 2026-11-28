@@ -14,23 +14,30 @@ import (
 
 // claim takes up to limit due jobs of queue for owner.
 func (c *Client) claim(ctx context.Context, queue string, limit int, owner string, lease time.Duration) ([]*Job, error) {
+	// RETURNING gives rows in no particular order, so the claimed ones are
+	// sorted again: the worker starts them in the order they were chosen.
 	rows, err := c.conn.Query(ctx, `
-		UPDATE medusa_jobs
-		SET status = 'running',
-		    attempts = attempts + 1,
-		    lease_token = gen_random_uuid(),
-		    lease_owner = $3,
-		    lease_expires = now() + make_interval(secs => $4::double precision),
-		    started_at = now()
-		WHERE id IN (
-		    SELECT id FROM medusa_jobs
-		    WHERE queue = $1 AND status = 'queued' AND scheduled_for <= now()
-		    ORDER BY priority DESC, scheduled_for, id
-		    LIMIT $2
-		    FOR UPDATE SKIP LOCKED
+		WITH claimed AS (
+		    UPDATE medusa_jobs
+		    SET status = 'running',
+		        attempts = attempts + 1,
+		        lease_token = gen_random_uuid(),
+		        lease_owner = $3,
+		        lease_expires = now() + make_interval(secs => $4::double precision),
+		        started_at = now()
+		    WHERE id IN (
+		        SELECT id FROM medusa_jobs
+		        WHERE queue = $1 AND status = 'queued' AND scheduled_for <= now()
+		        ORDER BY priority DESC, scheduled_for, id
+		        LIMIT $2
+		        FOR UPDATE SKIP LOCKED
+		    )
+		    RETURNING *
 		)
-		RETURNING id, queue, kind, payload, attempts, max_attempts, correlation_id, lease_token::text, enqueued_at,
-		          EXTRACT(EPOCH FROM now() - scheduled_for)::double precision`,
+		SELECT id, queue, kind, payload, attempts, max_attempts, correlation_id, lease_token::text, enqueued_at,
+		       EXTRACT(EPOCH FROM now() - scheduled_for)::double precision
+		FROM claimed
+		ORDER BY priority DESC, scheduled_for, id`,
 		queue, limit, owner, lease.Seconds())
 	if err != nil {
 		return nil, fmt.Errorf("claim from %s: %w", queue, err)
