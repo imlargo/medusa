@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/postgres/pgtest"
 	"github.com/imlargo/medusa/postgres/queue"
 
@@ -46,6 +47,14 @@ func TestAccountFlow(t *testing.T) {
 			t.Fatalf("%s %s: body is not JSON: %s", method, path, rec.Body)
 		}
 		return rec.Code, decoded
+	}
+	sendNoBody := func(method, path, body string) int {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec.Code
 	}
 	data := func(body map[string]any) map[string]any {
 		d, _ := body["data"].(map[string]any)
@@ -90,5 +99,47 @@ func TestAccountFlow(t *testing.T) {
 	status, body = send(http.MethodGet, "/v1/auth/user", "", access)
 	if status != http.StatusOK || data(body)["email"] != "ada@example.com" {
 		t.Errorf("me = %d %v, want 200 for ada@example.com", status, body)
+	}
+
+	// A refresh token is not an access token: it opens nothing by itself.
+	refresh, _ := tokens["refresh_token"].(string)
+	if status, _ = send(http.MethodGet, "/v1/auth/user", "", refresh); status != http.StatusUnauthorized {
+		t.Errorf("me with the refresh token as bearer = %d, want 401", status)
+	}
+
+	status, body = send(http.MethodPost, "/v1/auth/refresh", `{"refresh_token":"`+refresh+`"}`, "")
+	if status != http.StatusOK {
+		t.Fatalf("refresh = %d %v, want 200", status, body)
+	}
+	rotated, _ := data(body)["refresh_token"].(string)
+	newAccess, _ := data(body)["access_token"].(string)
+	if rotated == "" || rotated == refresh {
+		t.Errorf("refresh returned %q, want a new refresh token", rotated)
+	}
+	if status, _ = send(http.MethodGet, "/v1/auth/user", "", newAccess); status != http.StatusOK {
+		t.Errorf("me with the refreshed access token = %d, want 200", status)
+	}
+
+	// The old refresh token was copied, as far as the server can tell: it is
+	// refused, and the session it belonged to ends.
+	status, body = send(http.MethodPost, "/v1/auth/refresh", `{"refresh_token":"`+refresh+`"}`, "")
+	if status != http.StatusUnauthorized || body["code"] != auth.ErrInvalidRefreshToken.Code() {
+		t.Errorf("refresh with a used token = %d %v, want 401 %s", status, body, auth.ErrInvalidRefreshToken.Code())
+	}
+	if status, _ = send(http.MethodPost, "/v1/auth/refresh", `{"refresh_token":"`+rotated+`"}`, ""); status != http.StatusUnauthorized {
+		t.Errorf("refresh with the session's current token after a reuse = %d, want 401", status)
+	}
+
+	// Signing out ends a fresh session, and is safe to repeat.
+	_, body = send(http.MethodPost, "/v1/auth/login", `{"email":"ada@example.com","password":"correct horse"}`, "")
+	tokens, _ = data(body)["tokens"].(map[string]any)
+	refresh, _ = tokens["refresh_token"].(string)
+	for range 2 {
+		if status := sendNoBody(http.MethodPost, "/v1/auth/logout", `{"refresh_token":"`+refresh+`"}`); status != http.StatusNoContent {
+			t.Errorf("logout = %d, want 204", status)
+		}
+	}
+	if status, _ = send(http.MethodPost, "/v1/auth/refresh", `{"refresh_token":"`+refresh+`"}`, ""); status != http.StatusUnauthorized {
+		t.Errorf("refresh after logout = %d, want 401", status)
 	}
 }

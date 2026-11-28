@@ -5,6 +5,7 @@ package account
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -41,16 +42,23 @@ var dummyHash = sync.OnceValue(func() []byte {
 
 // Service registers and signs in accounts.
 type Service struct {
-	store      *store.Store
-	tokens     *auth.JWT[int64]
-	accessTTL  time.Duration
-	refreshTTL time.Duration
+	store     *store.Store
+	tokens    *auth.JWT[int64]
+	refresher *auth.Refresher
+	accessTTL time.Duration
 }
 
-// NewService signs sessions with tokens; access and refresh tokens expire
-// after accessTTL and refreshTTL.
+// NewService signs access tokens with tokens, valid for accessTTL, and
+// issues refresh tokens valid for refreshTTL. A refresh token is an opaque
+// value kept in the store, not a signed token: it cannot be used as an
+// access token, and it can be revoked.
 func NewService(store *store.Store, tokens *auth.JWT[int64], accessTTL, refreshTTL time.Duration) *Service {
-	return &Service{store: store, tokens: tokens, accessTTL: accessTTL, refreshTTL: refreshTTL}
+	return &Service{
+		store:     store,
+		tokens:    tokens,
+		refresher: auth.NewRefresher(store.Sessions, refreshTTL),
+		accessTTL: accessTTL,
+	}
 }
 
 // Register creates an account and signs it in. A taken email is
@@ -80,7 +88,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 		return nil, err
 	}
 
-	return s.sessionFor(created)
+	return s.sessionFor(ctx, created)
 }
 
 // Login signs in the account with email and password, or answers
@@ -99,7 +107,41 @@ func (s *Service) Login(ctx context.Context, email, password string) (*Session, 
 		return nil, ErrInvalidCredentials
 	}
 
-	return s.sessionFor(found)
+	return s.sessionFor(ctx, found)
+}
+
+// Refresh trades a refresh token for new tokens. The refresh token is
+// replaced and stops working. One that is unknown, expired or already used
+// is auth.ErrInvalidRefreshToken, and a used one also ends its session
+// everywhere: it was copied.
+func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Tokens, error) {
+	subject, next, err := s.refresher.Rotate(ctx, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	userID, err := strconv.ParseInt(subject, 10, 64)
+	if err != nil {
+		return nil, ErrTokenIssueFailed.WithCause(err)
+	}
+	access, err := s.tokens.Sign(userID, time.Now().Add(s.accessTTL))
+	if err != nil {
+		return nil, ErrTokenIssueFailed.WithCause(err)
+	}
+
+	return &Tokens{AccessToken: access, RefreshToken: next}, nil
+}
+
+// Logout ends the session refreshToken belongs to. Its access token keeps
+// working until it expires, which is why access tokens are short-lived.
+func (s *Service) Logout(ctx context.Context, refreshToken string) error {
+	return s.refresher.Revoke(ctx, refreshToken)
+}
+
+// PurgeExpiredSessions deletes refresh tokens whose time has passed.
+func (s *Service) PurgeExpiredSessions(ctx context.Context) error {
+	_, err := s.store.Sessions.DeleteExpired(ctx)
+	return err
 }
 
 // Me returns the signed-in account. A deleted account is user.ErrNotFound.
@@ -107,15 +149,13 @@ func (s *Service) Me(ctx context.Context, userID int64) (*user.User, error) {
 	return s.store.Users.Get(ctx, userID)
 }
 
-func (s *Service) sessionFor(u *user.User) (*Session, error) {
-	now := time.Now()
-
-	access, err := s.tokens.Sign(u.ID, now.Add(s.accessTTL))
+func (s *Service) sessionFor(ctx context.Context, u *user.User) (*Session, error) {
+	access, err := s.tokens.Sign(u.ID, time.Now().Add(s.accessTTL))
 	if err != nil {
 		return nil, ErrTokenIssueFailed.WithCause(err)
 	}
 
-	refresh, err := s.tokens.Sign(u.ID, now.Add(s.refreshTTL))
+	refresh, err := s.refresher.Issue(ctx, strconv.FormatInt(u.ID, 10))
 	if err != nil {
 		return nil, ErrTokenIssueFailed.WithCause(err)
 	}

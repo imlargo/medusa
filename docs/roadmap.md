@@ -31,13 +31,12 @@ An independent review of the code (2026-11-03) found the core sound. The error m
 
 What still stands between it and large production use, in order:
 
-1. Access and refresh tokens are not told apart (1.1).
-2. Only authentication exists: no scopes or roles, and the caller is not in `context.Context` for services (1.5).
-3. No tracing (3.3). Request IDs already reach every log line (3.2).
-4. Per-process state: rate limits, SSE and jobs (phase 4).
-5. Routes are documented by swag comments that drift (2.1).
+1. No tracing (3.3). Request IDs already reach every log line (3.2).
+2. Per-process state: rate limits and SSE (phase 4).
+3. Routes are documented by swag comments that drift (2.1).
+4. Passwords are hashed with bcrypt and have no policy (1.2, D2).
 
-Closed since the review: shutdown coordinated with readiness (1.6), a deadline on every request (1.7), secure headers (1.8), the error catalog (1.4), and `storage` and `env` as batteries (2.7, 2.2).
+Closed since the review: access and refresh tokens told apart (1.1), the caller in the context with scopes (1.5), a job queue (2.4), shutdown coordinated with readiness (1.6), a deadline on every request (1.7), secure headers (1.8), the error catalog (1.4), and `storage` and `env` as batteries (2.7, 2.2).
 
 ## First consumer: Butter's backend
 
@@ -79,7 +78,7 @@ Each item has an ID for its issue, a size (S: under a day, M: days, L: a week or
 
 | ID | Item | Size | Depends on | Status |
 |---|---|---|---|---|
-| 1.1 | **Access and refresh tokens told apart**: a token kind that `auth.Middleware` checks, and `POST /v1/auth/refresh`. Part of the auth battery (2.3). Needs D1. | M | 0.6 | |
+| 1.1 | **Access and refresh tokens told apart**: refresh tokens are opaque values in the app's store, rotated by `auth.Refresher`, with `POST /v1/auth/refresh` and `/v1/auth/logout` (D1). | M | 0.6 | Done, unreleased |
 | 1.2 | **Password policy** at registration, as a rule with its declared error. Needs D2. | S | | |
 | 1.3 | **Server timeouts**: read, write and idle defaults in `httpserver`; long routes extend their own deadline | M | | Done |
 | 1.4 | **Error code catalog**: a test that finds every declared `apperr` error, fails on duplicate codes, and generates `app/api/errors.md`. It later feeds the error responses in the OpenAPI spec (2.1). | M | | Done (`apperr.Declared`, `TestErrorCatalog`) |

@@ -87,7 +87,7 @@ func TestRegisterTwiceIsEmailTaken(t *testing.T) {
 // server failure, and it is caught before anything is stored.
 func TestRegisterRejectsAPasswordOver72Bytes(t *testing.T) {
 	t.Parallel()
-	svc := account.NewService(nil, auth.MustNewJWT[int64](strings.Repeat("s", 32)), time.Minute, time.Hour)
+	svc := account.NewService(store.New(nil), auth.MustNewJWT[int64](strings.Repeat("s", 32)), time.Minute, time.Hour)
 
 	if _, err := svc.Register(t.Context(), "ada@example.com", strings.Repeat("a", 73)); !errors.Is(err, account.ErrPasswordTooLong) {
 		t.Errorf("Register() = %v, want ErrPasswordTooLong", err)

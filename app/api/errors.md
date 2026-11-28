@@ -10,6 +10,7 @@ Every error the API answers with, as the `code` of its RFC 9457 problem. Generat
 | `account.token_issue_failed` | 500 | internal | could not issue the session tokens |
 | `auth.insufficient_scope` | 403 | permission_denied | this action is not allowed for these credentials |
 | `auth.invalid_api_key` | 401 | unauthenticated | invalid API key |
+| `auth.invalid_refresh_token` | 401 | unauthenticated | invalid or expired refresh token |
 | `auth.invalid_token` | 401 | unauthenticated | invalid or expired token |
 | `auth.malformed_credentials` | 401 | unauthenticated | the authorization header must be 'Bearer &lt;token&gt;' |
 | `auth.missing_credentials` | 401 | unauthenticated | the authorization header is missing |

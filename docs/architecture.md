@@ -152,6 +152,22 @@ Response shapes (a nil slice in `data` is always sent as `[]`, never `null`):
 
 The baseline migration (`00001`) matches the table GORM created, so existing databases adopt it without changes. The schema is the single source for both goose and sqlc, so the queries are checked against it at generation time.
 
+## Sessions
+
+Signing in returns two tokens with different jobs.
+
+| | Access token | Refresh token |
+|---|---|---|
+| What it is | A signed JWT | An opaque random value |
+| Lives | `JWT_TOKEN_EXPIRATION` (15 minutes) | `JWT_REFRESH_EXPIRATION` (7 days) |
+| Where it is checked | By its signature, with no lookup | In the `refresh_tokens` table, by its hash |
+| Used for | Every request to a protected route | `POST /v1/auth/refresh` and `/v1/auth/logout` only |
+
+- **Rotation.** Each refresh returns a new refresh token and retires the one used.
+- **Reuse ends the session.** A retired token presented again was copied, so every token of that sign-in is deleted and both holders sign in again. Two refreshes racing with the same token count as a reuse.
+- **Logout** deletes the session's tokens. The access token already issued works until it expires, which is why it is short-lived.
+- **Cleanup.** The worker deletes expired refresh tokens daily (`account.purge_sessions`).
+
 ## Real-time events
 
 `GET /v1/events` streams server-sent events through `github.com/imlargo/sse`.

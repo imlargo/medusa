@@ -86,6 +86,11 @@ func NewWorker(ctx context.Context, name string) (*App, error) {
 // registerRoutes installs every route.
 func registerJobs(worker *queue.Worker, c *Container) {
 	queue.Register(worker, account.KindWelcome, account.Welcome(c.Logger))
+
+	// Daily, at a quiet hour. With CatchUp a deploy at that minute delays the
+	// run instead of skipping it; Coalesce keeps a backlog from repeating it.
+	queue.Register(worker, account.KindPurgeSessions, account.PurgeSessions(c.Services.Account), queue.Coalesce())
+	worker.Schedule(account.KindPurgeSessions, "17 3 * * *", nil, queue.CatchUp(6*time.Hour))
 }
 
 // queueStats adapts the queue's state to what the metrics package exports.
