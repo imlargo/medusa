@@ -3,27 +3,32 @@ package account
 import (
 	"context"
 	"log/slog"
+
+	"github.com/imlargo/medusa/postgres/events"
 )
 
-// Kinds of job of this feature.
+// EventRegistered is published when an account is created.
+const EventRegistered = "account.registered"
+
+// Registered is the data of an EventRegistered event.
+type Registered struct {
+	UserID int64 `json:"user_id"`
+}
+
+// Names of this feature's jobs and subscribers.
 const (
-	// KindWelcome is enqueued for every new account.
-	KindWelcome = "account.welcome"
+	// SubscriberWelcome reacts to EventRegistered.
+	SubscriberWelcome = "account.welcome"
 
 	// KindPurgeSessions runs daily and deletes expired refresh tokens.
 	KindPurgeSessions = "account.purge_sessions"
 )
 
-// WelcomeJob is the payload of a KindWelcome job.
-type WelcomeJob struct {
-	UserID int64 `json:"user_id"`
-}
-
-// Welcome handles KindWelcome jobs. It is where a welcome email would be
+// Welcome reacts to a new account. It is where a welcome email would be
 // sent; until the app has mail, it records that the account was welcomed.
-func Welcome(logger *slog.Logger) func(ctx context.Context, job WelcomeJob) error {
-	return func(ctx context.Context, job WelcomeJob) error {
-		logger.InfoContext(ctx, "account welcomed", slog.Int64("user_id", job.UserID))
+func Welcome(logger *slog.Logger) func(ctx context.Context, event events.Event[Registered]) error {
+	return func(ctx context.Context, event events.Event[Registered]) error {
+		logger.InfoContext(ctx, "account welcomed", slog.Int64("user_id", event.Data.UserID), slog.String("event_id", event.ID))
 		return nil
 	}
 }

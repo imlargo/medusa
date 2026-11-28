@@ -72,14 +72,14 @@ func TestAccountFlow(t *testing.T) {
 		t.Errorf("register again = %d %v, want 409 %s", status, body, user.ErrEmailTaken.Code())
 	}
 
-	// One account, one welcome job: the rejected registration rolled its own
-	// back with the insert it belonged to.
-	var welcomes int
-	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM medusa_jobs WHERE kind = $1", account.KindWelcome).Scan(&welcomes); err != nil {
-		t.Fatalf("count welcome jobs: %v", err)
+	// One account, one event: the rejected registration rolled its own back
+	// with the insert it belonged to.
+	var registered int
+	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM medusa_jobs WHERE payload->>'name' = $1", account.EventRegistered).Scan(&registered); err != nil {
+		t.Fatalf("count published events: %v", err)
 	}
-	if welcomes != 1 {
-		t.Errorf("welcome jobs = %d, want 1", welcomes)
+	if registered != 1 {
+		t.Errorf("%s events = %d, want 1", account.EventRegistered, registered)
 	}
 
 	status, body = send(http.MethodPost, "/v1/auth/login", `{"email":"ada@example.com","password":"wrong"}`, "")

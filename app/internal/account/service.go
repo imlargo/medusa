@@ -78,15 +78,16 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 	}
 
 	// The unique email constraint decides, so two concurrent registrations of
-	// the same email cannot both succeed. The welcome job is part of the same
-	// transaction: no account without its job, no job without its account.
+	// the same email cannot both succeed. The event is part of the same
+	// transaction: whoever reacts to a new account hears of every one that
+	// exists and of none that does not.
 	var created *user.User
 	err = s.store.WithTx(ctx, func(tx *store.Store) error {
 		var txErr error
 		if created, txErr = tx.Users.Create(ctx, email, string(hash)); txErr != nil {
 			return txErr
 		}
-		return tx.Enqueue(ctx, KindWelcome, WelcomeJob{UserID: created.ID})
+		return tx.Publish(ctx, EventRegistered, Registered{UserID: created.ID})
 	})
 	if err != nil {
 		return nil, err

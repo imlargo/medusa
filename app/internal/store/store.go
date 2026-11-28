@@ -11,6 +11,7 @@ import (
 	"github.com/imlargo/medusa"
 	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/postgres"
+	"github.com/imlargo/medusa/postgres/events"
 	"github.com/imlargo/medusa/postgres/queue"
 
 	"github.com/imlargo/medusa/app/internal/database/sqlc"
@@ -33,10 +34,17 @@ func New(conn postgres.Conn) *Store {
 
 	return &Store{
 		conn:     conn,
-		jobs:     queue.New(conn, queue.WithCorrelationID(medusa.RequestIDFrom), queue.WithMetadata(callerMetadata)),
+		jobs:     NewJobs(conn),
 		Users:    user.NewRepository(queries),
 		Sessions: session.NewRepository(queries),
 	}
+}
+
+// NewJobs is the app's client of the job queue on conn. Every job it
+// enqueues remembers the ID of the request that caused it and who made it,
+// so the worker builds its own client with it too.
+func NewJobs(conn postgres.Conn) *queue.Client {
+	return queue.New(conn, queue.WithCorrelationID(medusa.RequestIDFrom), queue.WithMetadata(callerMetadata))
 }
 
 // callerMetadata is what a job remembers about who caused it, so its
@@ -54,6 +62,16 @@ func callerMetadata(ctx context.Context) map[string]string {
 // when the writes around it are committed.
 func (s *Store) Enqueue(ctx context.Context, kind string, payload any, opts ...queue.EnqueueOption) error {
 	_, _, err := s.jobs.EnqueueTx(ctx, s.conn, kind, payload, opts...)
+	return err
+}
+
+// Publish announces a fact to whoever subscribes to it (see registerJobs in
+// bootstrap/worker.go), each of which reacts on its own. Like Enqueue, on
+// the Store that WithTx hands out it is part of the transaction. Use it for
+// a fact with several consumers, or whose consumers the feature should not
+// know; work for one known consumer is Enqueue.
+func (s *Store) Publish(ctx context.Context, event string, data any) error {
+	_, err := events.PublishTx(ctx, s.jobs, s.conn, event, data)
 	return err
 }
 
