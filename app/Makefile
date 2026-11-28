@@ -1,4 +1,4 @@
-.PHONY: dev run migrate test vet build sqlc docs clean
+.PHONY: dev run worker migrate test vet build sqlc docs clean
 
 # Code generators run from pinned images, so the generated code does not
 # depend on what is installed on the machine that ran them.
@@ -11,6 +11,10 @@ dev:
 
 run:
 	go run ./cmd/api
+
+# Runs the worker that executes queued jobs.
+worker:
+	go run ./cmd/worker
 
 # Applies pending migrations to DATABASE_URL.
 migrate:
@@ -25,6 +29,7 @@ vet:
 build:
 	go build -o ./bin/api ./cmd/api
 	go build -o ./bin/migrate ./cmd/migrate
+	go build -o ./bin/worker ./cmd/worker
 
 # Regenerates internal/database/sqlc from the migrations and the queries.
 sqlc:

@@ -48,7 +48,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags='-s -w' -o /usr/local/bin/api ./cmd/api && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags='-s -w' -o /usr/local/bin/migrate ./cmd/migrate
+    go build -trimpath -ldflags='-s -w' -o /usr/local/bin/migrate ./cmd/migrate && \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags='-s -w' -o /usr/local/bin/worker ./cmd/worker
 
 # ---------------------------------------------------------------------------
 # Runtime
@@ -70,6 +72,7 @@ LABEL org.opencontainers.image.title="medusa-api" \
 
 COPY --from=build /usr/local/bin/api /usr/local/bin/api
 COPY --from=build /usr/local/bin/migrate /usr/local/bin/migrate
+COPY --from=build /usr/local/bin/worker /usr/local/bin/worker
 
 # HOST matters: the app defaults to localhost, which inside a container means
 # "reachable from nothing". APP_ENV=production turns on Gin release mode and the
@@ -89,3 +92,7 @@ ENTRYPOINT ["/usr/local/bin/api"]
 # deployed rather than whatever the last build produced:
 #
 #   docker run --rm --env-file .env --entrypoint /usr/local/bin/migrate <image>
+#
+# So does the worker that runs queued jobs:
+#
+#   docker run --env-file .env --entrypoint /usr/local/bin/worker <image>

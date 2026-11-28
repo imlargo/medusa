@@ -163,12 +163,27 @@ The baseline migration (`00001`) matches the table GORM created, so existing dat
 
 ## Background jobs
 
-Periodic work runs inside the process as a `job.Every`, registered with `lifecycle` like the HTTP server (the app has none yet).
+Work that outlives a request runs in a second process, the worker (`cmd/worker`), through a job queue kept in Postgres (`postgres/queue`, ADR 0004).
 
-- **No overlap.** A run that outlasts the interval delays the next one.
-- **Failures are contained.** Errors and panics are logged with the job name and the schedule continues.
-- **Owned shutdown.** On shutdown the run's context is canceled and `lifecycle` waits for it, bounded by the job's stop timeout (10 s by default).
-- **Per process.** Every replica runs every job.
+```mermaid
+flowchart LR
+    api["api: handler -> service"] -- "write + enqueue, one transaction" --> db[("Postgres: app tables + medusa_jobs")]
+    db -- "claim (SKIP LOCKED, lease)" --> worker["worker: handler per kind"]
+    worker -- "succeed / retry / fail" --> db
+```
+
+- **Enqueued with its cause.** `store.Enqueue` inside `store.WithTx` adds the job in the transaction of the write, so a job exists exactly when its cause is committed.
+- **One worker at a time.** A worker claims a job under a lease it renews while the handler runs. Any number of worker replicas share the queues.
+- **A dead worker loses its jobs.** When a lease expires, another worker's reaper puts the job back, or fails it if its attempts are spent. The interrupted run counts as an attempt.
+- **Retries.** A handler's error sends the job back after a growing wait (5 s, 10 s, 20 s... up to 10 minutes). Out of attempts (3 by default), it stays in `medusa_jobs` as `failed` with its `last_error`.
+- **At least once.** A job can run twice, so handlers are safe to repeat.
+- **The request ID follows.** A job keeps the ID of the request that enqueued it, and the worker's logs carry it.
+- **Periodic jobs** (`worker.Periodic`) are enqueued by every replica with one key per time slot, so each slot runs once.
+- **Shutdown.** The worker stops claiming, waits `SHUTDOWN_TIMEOUT` for running jobs, and hands the rest back without spending their attempt.
+
+The example app has one job: `account.welcome`, enqueued by registration.
+
+`job.Every` remains for periodic work that belongs to one process (the app has none): no overlap, failures contained, canceled and awaited on shutdown, and run by every replica.
 
 ## Shutdown
 
@@ -200,12 +215,13 @@ All configuration comes from environment variables, optionally loaded from a `.e
 
 ```mermaid
 flowchart LR
-    build["docker build -f app/Dockerfile . (root context)"] --> image["distroless image: api + migrate"]
+    build["docker build -f app/Dockerfile . (root context)"] --> image["distroless image: api + worker + migrate"]
     image --> migrate["run migrate (one job)"]
     migrate --> api["start api replicas"]
+    migrate --> workers["start worker replicas"]
 ```
 
-- **One image, two binaries.** Migrations run with `--entrypoint /usr/local/bin/migrate` before the new version starts, never from each replica.
+- **One image, three binaries.** `migrate` runs with `--entrypoint /usr/local/bin/migrate` before the new version starts, never from each replica: it applies the migrations and installs the queue's table. The worker runs from the same image with `--entrypoint /usr/local/bin/worker`.
 - **Build context.** The image builds from the repository root because the app compiles against the Medusa module next to it.
 - **Container defaults.** The container listens on `0.0.0.0:8000` and runs as a non-root user.
 
@@ -214,6 +230,6 @@ flowchart LR
 A few pieces of state live inside each process. They are fine for one replica and need attention before running several:
 
 - **Rate limiter counters** are per replica, unless the limiter is moved to a shared store.
-- **Background jobs** run on every replica.
+- **`job.Every` jobs** run on every replica. Queue jobs do not: they are claimed by one worker.
 - **SSE events and sessions** are in memory: an event published on one replica does not reach a client connected to another.
 - **Readiness** checks the database. A database blip therefore takes every replica out of rotation at once.

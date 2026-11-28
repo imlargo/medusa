@@ -35,6 +35,7 @@ Each is its own module, with its own dependencies and versions. Choosing one is 
 |---|---|---|
 | `postgres` | `Open` (pool, ping, slow query log), `Migrate` (goose over any `fs.FS`), `Conn` (pool or transaction), `IsNoRows`, `IsUniqueViolation` | pgx v5, goose |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test on `TEST_DATABASE_URL` | (same module) |
+| `postgres/queue` | A job queue: enqueued in the caller's transaction, claimed with leases, retried, periodic jobs once per cluster | (same module) |
 | `auth` | `JWT[S]` with a typed subject (`int64` or `string`) and optional issuer, `Middleware`, `SubjectFrom[S]` | golang-jwt v5 |
 | `storage` | S3-compatible object storage (Cloudflare R2): uploads (sized, streamed, presigned), downloads, head, copy, list, bulk delete, key validation | AWS SDK v2 |
 | `env` | Typed environment variables with a `.env` fallback, reporting every problem at once | godotenv |

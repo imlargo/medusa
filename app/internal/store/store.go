@@ -8,7 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/imlargo/medusa"
 	"github.com/imlargo/medusa/postgres"
+	"github.com/imlargo/medusa/postgres/queue"
 
 	"github.com/imlargo/medusa/app/internal/database/sqlc"
 	"github.com/imlargo/medusa/app/internal/user"
@@ -17,6 +19,7 @@ import (
 // Store holds one repository per aggregate.
 type Store struct {
 	conn  postgres.Conn
+	jobs  *queue.Client
 	Users *user.Repository
 }
 
@@ -27,8 +30,17 @@ func New(conn postgres.Conn) *Store {
 
 	return &Store{
 		conn:  conn,
+		jobs:  queue.New(conn, queue.WithCorrelationID(medusa.RequestIDFrom)),
 		Users: user.NewRepository(queries),
 	}
+}
+
+// Enqueue adds a job for the worker (see cmd/worker). On the Store that
+// WithTx hands out, the job is part of the transaction: it exists exactly
+// when the writes around it are committed.
+func (s *Store) Enqueue(ctx context.Context, kind string, payload any, opts ...queue.EnqueueOption) error {
+	_, _, err := s.jobs.EnqueueTx(ctx, s.conn, kind, payload, opts...)
+	return err
 }
 
 // WithTx runs fn with a Store whose repositories all share one transaction.
