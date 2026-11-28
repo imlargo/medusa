@@ -48,7 +48,7 @@ Core:
 | `httpserver` | `New(handler, logger, opts...)`: serves any `http.Handler` with graceful shutdown |
 | `job` | `Every(name, interval, fn, opts...)`: periodic background work, run and stopped by `lifecycle` |
 | `lifecycle` | `New(opts...).Run(ctx)`: runs servers and hooks, stops on SIGINT/SIGTERM |
-| `metrics` | `NewHTTP(registry)`: Prometheus request metrics |
+| `metrics` | `NewHTTP(registry)`: Prometheus request metrics; `NewJobs(registry, stats)`: job wait, duration, outcomes and queue depth |
 | `httpclient` | `New(opts...)`, `Do`, `JSON`: outbound calls with a timeout, a body cap, safe retries, the request ID sent along; `StatusError`, `ErrUnavailable` |
 
 Batteries:
@@ -57,7 +57,7 @@ Batteries:
 |---|---|
 | `postgres` | `Open(ctx, url, logger, opts...)`, `Migrate(ctx, url, migrations, logger)`, `Conn`, `IsNoRows`, `IsUniqueViolation` |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh database per test, cloned from a template migrated once per set of migrations |
-| `postgres/queue` | Jobs on Postgres: `Install`, `New(conn)`, `Enqueue`/`EnqueueTx`, `Worker(logger, queues)`, `Register`, `Periodic`, `Stats` |
+| `postgres/queue` | Jobs on Postgres: `Install`, `New(conn)`, `Enqueue`/`EnqueueTx`, `Worker(logger, queues)`, `Register`, `Schedule` (cron), `Periodic`, `Stats`, `Failed`, `Retry` |
 | `auth` | `NewJWT[S](secret, WithIssuer(...))`, `Sign`, `Parse`, `Middleware(j)`, `SubjectFrom[S](ctx)` |
 | `storage` | S3/R2 object storage: `NewFileStorage`, upload (sized, stream, presigned PUT), download, `Head`, `Copy`, `List`, bulk delete, key validation |
 | `env` | `LoadDotEnv()`, `New()`: typed getters (`Required`, `Int`, `Duration`, `List`...) that collect every problem into `Err()` |
@@ -160,10 +160,12 @@ Work caused by a request (send the receipt, process the upload) or by the clock 
    })
    ```
    Options: `queue.In("mail")` for another queue, `queue.After(time.Hour)`, `queue.MaxAttempts(1)` for work that must never repeat, `queue.Unique(key)` to enqueue an event once.
-3. Register the handler in `registerJobs` in `bootstrap/worker.go`: `queue.Register(worker, account.KindWelcome, ...)`. For the clock, also `worker.Periodic(kind, time.Hour, payload)`: it runs once per cluster.
+3. Register the handler in `registerJobs` in `bootstrap/worker.go`: `queue.Register(worker, account.KindWelcome, ...)`. For the clock, also `worker.Schedule(kind, "35 6 * * *", payload)` (cron, UTC) or `worker.Periodic(kind, time.Hour, payload)`: either runs once per cluster.
 4. A test that runs the write and finds the job in `medusa_jobs`, after `queue.Install(ctx, pool)` on the test database (see `flow_test.go`).
 
-A handler returns an error to be retried later, and `queue.Permanent(err)` when no retry can help. A job out of attempts stays in `medusa_jobs` with `status = 'failed'` and its `last_error`.
+A handler returns an error to be retried later, and `queue.Permanent(err)` when no retry can help. A job out of attempts stays in `medusa_jobs` with `status = 'failed'` and its `last_error`; `queue.Client.Failed` lists them and `Retry(id)` puts one back.
+
+The worker serves `/metrics` and `/health` on `WORKER_PORT`: `jobs_ready`, `jobs_oldest_ready_seconds`, `jobs_failed`, `jobs_wait_seconds`, `jobs_run_duration_seconds` and `jobs_runs_total`, by queue and kind.
 
 `job.Every` is only for work that belongs to one process, such as refreshing a cache it holds: every replica runs it, and nothing survives a crash. Never start a goroutine with `go` for long-lived work: nobody stops it, and a panic in it kills the process.
 

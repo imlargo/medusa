@@ -109,11 +109,12 @@ type Queues map[string]int
 // Worker claims and runs jobs. It satisfies lifecycle.Server: Start blocks
 // until Stop, which lets running jobs finish.
 type Worker struct {
-	client   *Client
-	logger   *slog.Logger
-	queues   Queues
-	handlers map[string]handler
-	periodic []periodic
+	client    *Client
+	logger    *slog.Logger
+	queues    Queues
+	handlers  map[string]handler
+	periodic  []periodic
+	scheduled []scheduled
 
 	owner        string
 	pollInterval time.Duration
@@ -135,6 +136,13 @@ type Worker struct {
 type periodic struct {
 	kind    string
 	every   time.Duration
+	payload any
+	opts    []EnqueueOption
+}
+
+type scheduled struct {
+	kind    string
+	when    cron
 	payload any
 	opts    []EnqueueOption
 }
@@ -238,10 +246,31 @@ func Register[T any](w *Worker, kind string, fn func(ctx context.Context, payloa
 	}, opts...)
 }
 
-// Periodic enqueues a job of kind once per interval, on the interval's
-// boundary (every hour, on the hour). Every replica of the worker tries, and
-// a unique key per slot lets exactly one succeed, so the job runs once per
-// cluster. The kind needs a handler like any other.
+// Schedule enqueues a job of kind at the minutes a cron expression names, in
+// UTC: "35 6 * * *" is 06:35 every day, "40 4,16 * * *" is 04:40 and 16:40,
+// "*/5 * * * *" is every five minutes. The fields are minute, hour, day of
+// month, month and day of week; names and @daily shortcuts are not supported.
+// It panics on an expression it cannot read, a wiring mistake found at
+// startup.
+//
+// Every replica of the worker tries, and a unique key per minute lets exactly
+// one succeed, so the job runs once per cluster. A minute that passes while
+// no worker is running is not made up afterwards. The kind needs a handler
+// like any other.
+func (w *Worker) Schedule(kind, cronExpr string, payload any, opts ...EnqueueOption) {
+	when, err := parseCron(cronExpr)
+	if err != nil {
+		panic("queue: schedule of " + kind + ": " + err.Error())
+	}
+	w.scheduled = append(w.scheduled, scheduled{kind: kind, when: when, payload: payload, opts: opts})
+}
+
+// Periodic enqueues a job of kind once per interval. Slots are aligned to
+// the clock in UTC, not to when the process started: an hourly job is due on
+// the hour, on every replica. For a time of day, use [Worker.Schedule].
+// Every replica of the worker tries, and a unique key per slot lets exactly
+// one succeed, so the job runs once per cluster. The kind needs a handler
+// like any other.
 func (w *Worker) Periodic(kind string, every time.Duration, payload any, opts ...EnqueueOption) {
 	if every < time.Second {
 		panic("queue: the interval of periodic job " + kind + " must be at least a second")
@@ -502,6 +531,9 @@ func (w *Worker) maintain(ctx context.Context) {
 	defer schedule.Stop()
 
 	lastSlot := make([]time.Time, len(w.periodic))
+	// The last minute whose schedules were enqueued. Starting one minute back
+	// makes the first tick handle the current minute.
+	lastMinute := time.Now().UTC().Truncate(time.Minute).Add(-time.Minute)
 
 	for {
 		select {
@@ -533,8 +565,38 @@ func (w *Worker) maintain(ctx context.Context) {
 				}
 				lastSlot[i] = slot
 			}
+			lastMinute = w.enqueueScheduled(ctx, lastMinute, now.UTC().Truncate(time.Minute))
 		}
 	}
+}
+
+// maxCatchUp is how far back a worker that stalled makes up for the minutes
+// its own ticks skipped.
+const maxCatchUp = time.Hour
+
+// enqueueScheduled enqueues the scheduled jobs of every minute after last, up
+// to current, and returns the last minute it finished. A minute that fails is
+// tried again on the next tick; its unique keys make that safe.
+func (w *Worker) enqueueScheduled(ctx context.Context, last, current time.Time) time.Time {
+	if current.Sub(last) > maxCatchUp {
+		last = current.Add(-maxCatchUp)
+	}
+
+	for minute := last.Add(time.Minute); !minute.After(current); minute = minute.Add(time.Minute) {
+		for _, s := range w.scheduled {
+			if !s.when.matches(minute) {
+				continue
+			}
+			key := fmt.Sprintf("schedule:%s:%s", s.kind, minute.Format(time.RFC3339))
+			opts := append([]EnqueueOption{Unique(key)}, s.opts...)
+			if _, _, err := w.client.Enqueue(ctx, s.kind, s.payload, opts...); err != nil {
+				w.logger.ErrorContext(ctx, "queue could not enqueue a scheduled job", slog.String("kind", s.kind), slog.Any("error", err))
+				return last
+			}
+		}
+		last = minute
+	}
+	return last
 }
 
 // defaultBackoff waits 5s, 10s, 20s... up to 10 minutes, give or take a

@@ -549,3 +549,106 @@ func jobIDs(jobs []*Job) []int64 {
 	}
 	return ids
 }
+
+func TestAFailedJobIsListedAndCanBeRetried(t *testing.T) {
+	t.Parallel()
+	c, pool := newClient(t)
+	ctx := t.Context()
+
+	var fail atomic.Bool
+	fail.Store(true)
+	w := fastWorker(c, Queues{"posting": 1})
+	w.Handle("post", func(context.Context, *Job) error {
+		if fail.Load() {
+			return errors.New("the account is disconnected")
+		}
+		return nil
+	})
+	startWorker(t, w)
+
+	id, _, err := c.Enqueue(ctx, "post", map[string]int{"post_id": 7}, In("posting"), MaxAttempts(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the job to fail", func() bool { return readJob(t, pool, id).status == "failed" })
+
+	failed, err := c.Failed(ctx, FailedFilter{Queue: "posting", Kind: "post"})
+	if err != nil || len(failed) != 1 {
+		t.Fatalf("Failed() = %+v, %v, want the one failed job", failed, err)
+	}
+	if got := failed[0]; got.ID != id || got.LastError != "the account is disconnected" || string(got.Payload) != `{"post_id": 7}` || got.FailedAt.IsZero() {
+		t.Errorf("failed job = %+v", got)
+	}
+	if other, err := c.Failed(ctx, FailedFilter{Queue: "mail"}); err != nil || len(other) != 0 {
+		t.Errorf("Failed() for another queue = %+v, %v, want none", other, err)
+	}
+
+	fail.Store(false)
+	if retried, err := c.Retry(ctx, id); err != nil || !retried {
+		t.Fatalf("Retry() = %v, %v, want true", retried, err)
+	}
+	eventually(t, "the retried job to succeed", func() bool { return readJob(t, pool, id).status == "succeeded" })
+
+	if retried, err := c.Retry(ctx, id); err != nil || retried {
+		t.Errorf("Retry() of a job that is not failed = %v, %v, want false", retried, err)
+	}
+}
+
+// Two replicas hold the same schedule; each minute it names runs once.
+func TestAScheduledJobIsEnqueuedOncePerMinuteAcrossWorkers(t *testing.T) {
+	t.Parallel()
+	c, pool := newClient(t)
+	ctx := t.Context()
+
+	for range 2 {
+		w := fastWorker(c, Queues{DefaultQueue: 1})
+		w.Handle("every_minute", func(context.Context, *Job) error { return nil })
+		w.Schedule("every_minute", "* * * * *", nil)
+		w.Schedule("never", "0 0 30 2 *", nil) // February 30th
+		startWorker(t, w)
+	}
+
+	eventually(t, "the current minute to be enqueued", func() bool {
+		var jobs int
+		_ = pool.QueryRow(ctx, "SELECT count(*) FROM medusa_jobs WHERE kind = 'every_minute'").Scan(&jobs)
+		return jobs >= 1
+	})
+	// Give the second worker's tick time to try the same minute.
+	time.Sleep(1500 * time.Millisecond)
+
+	var jobs, slots, never int
+	if err := pool.QueryRow(ctx, "SELECT count(*), count(DISTINCT unique_key) FROM medusa_jobs WHERE kind = 'every_minute'").Scan(&jobs, &slots); err != nil {
+		t.Fatal(err)
+	}
+	if jobs != slots {
+		t.Errorf("%d jobs for %d minutes, want one job per minute", jobs, slots)
+	}
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM medusa_jobs WHERE kind = 'never'").Scan(&never); err != nil {
+		t.Fatal(err)
+	}
+	if never != 0 {
+		t.Errorf("jobs of a schedule that never matches = %d, want 0", never)
+	}
+}
+
+func TestAStalledWorkerMakesUpTheMinutesItSkipped(t *testing.T) {
+	t.Parallel()
+	c, pool := newClient(t)
+	ctx := t.Context()
+
+	w := fastWorker(c, Queues{DefaultQueue: 1})
+	w.Schedule("every_minute", "* * * * *", nil)
+
+	now := time.Date(2026, 11, 27, 6, 35, 0, 0, time.UTC)
+	if got := w.enqueueScheduled(ctx, now.Add(-3*time.Minute), now); !got.Equal(now) {
+		t.Errorf("enqueueScheduled() = %s, want %s", got, now)
+	}
+
+	var jobs int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM medusa_jobs").Scan(&jobs); err != nil {
+		t.Fatal(err)
+	}
+	if jobs != 3 {
+		t.Errorf("jobs = %d, want the 3 minutes since the last tick", jobs)
+	}
+}
