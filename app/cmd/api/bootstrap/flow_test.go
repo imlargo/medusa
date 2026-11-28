@@ -28,7 +28,8 @@ func TestAccountFlow(t *testing.T) {
 	}
 
 	router := newRouter(newTestContainer(t, func(c *Container) {
-		service := account.NewService(store.New(pool), c.JWT, time.Minute, time.Hour)
+		// No reuse grace: a second use of a refresh token is a stolen one.
+		service := account.NewService(store.New(pool), c.JWT, time.Minute, time.Hour, 0)
 		c.Handlers.Account = account.NewHandler(service)
 	}))
 

@@ -15,11 +15,12 @@ import (
 type memoryStore struct {
 	mu     sync.Mutex
 	tokens map[string]auth.RefreshToken
-	used   map[string]bool
+	usedAt map[string]time.Time
+	now    func() time.Time
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{tokens: map[string]auth.RefreshToken{}, used: map[string]bool{}}
+	return &memoryStore{tokens: map[string]auth.RefreshToken{}, usedAt: map[string]time.Time{}, now: time.Now}
 }
 
 func (s *memoryStore) Create(_ context.Context, token auth.RefreshToken) error {
@@ -29,17 +30,27 @@ func (s *memoryStore) Create(_ context.Context, token auth.RefreshToken) error {
 	return nil
 }
 
-func (s *memoryStore) Consume(_ context.Context, hash string) (auth.RefreshToken, bool, error) {
+func (s *memoryStore) Consume(_ context.Context, hash string) (auth.ConsumedToken, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	token, ok := s.tokens[hash]
 	if !ok {
-		return auth.RefreshToken{}, false, auth.ErrRefreshTokenNotFound
+		return auth.ConsumedToken{}, auth.ErrRefreshTokenNotFound
 	}
-	reused := s.used[hash]
-	s.used[hash] = true
-	return token, reused, nil
+
+	now := s.now()
+	if first, reused := s.usedAt[hash]; reused {
+		return auth.ConsumedToken{RefreshToken: token, Reused: true, UsedAgo: now.Sub(first)}, nil
+	}
+
+	s.usedAt[hash] = now
+	for sibling, other := range s.tokens {
+		if _, used := s.usedAt[sibling]; !used && token.Parent != "" && other.Parent == token.Parent {
+			s.usedAt[sibling] = now
+		}
+	}
+	return auth.ConsumedToken{RefreshToken: token}, nil
 }
 
 func (s *memoryStore) RevokeFamily(_ context.Context, family string) error {
@@ -133,5 +144,49 @@ func TestRotateRejectsWhatItCannotTrade(t *testing.T) {
 func TestRevokeOfAnUnknownTokenIsNotAnError(t *testing.T) {
 	if err := auth.NewRefresher(newMemoryStore(), time.Hour).Revoke(t.Context(), "never-issued"); err != nil {
 		t.Errorf("Revoke() = %v, want nil", err)
+	}
+}
+
+// A page that fires several requests with an expired access token sends one
+// refresh token several times at once. With a grace, each gets a token.
+func TestWithinTheGraceABurstIsServedInsteadOfRevoked(t *testing.T) {
+	store := newMemoryStore()
+	refresher := auth.NewRefresher(store, time.Hour, auth.WithReuseGrace(10*time.Second))
+	ctx := t.Context()
+
+	first, _ := refresher.Issue(ctx, "7")
+
+	_, a, errA := refresher.Rotate(ctx, first)
+	_, b, errB := refresher.Rotate(ctx, first)
+	if errA != nil || errB != nil || a == b {
+		t.Fatalf("two rotations in a burst = %q %v, %q %v, want two different tokens", a, errA, b, errB)
+	}
+
+	// Whichever the client kept continues the session...
+	if _, _, err := refresher.Rotate(ctx, b); err != nil {
+		t.Fatalf("Rotate() of the token the client kept = %v", err)
+	}
+	// ...and its sibling was retired with it: past the grace, presenting it
+	// is a reuse, and ends the session.
+	store.now = func() time.Time { return time.Now().Add(time.Minute) }
+	if _, _, err := refresher.Rotate(ctx, a); !errors.Is(err, auth.ErrInvalidRefreshToken) {
+		t.Errorf("Rotate() of the retired sibling after the grace = %v, want ErrInvalidRefreshToken", err)
+	}
+}
+
+func TestPastTheGraceAReuseStillRevokesTheSession(t *testing.T) {
+	store := newMemoryStore()
+	refresher := auth.NewRefresher(store, time.Hour, auth.WithReuseGrace(10*time.Second))
+	ctx := t.Context()
+
+	stolen, _ := refresher.Issue(ctx, "7")
+	_, current, _ := refresher.Rotate(ctx, stolen)
+
+	store.now = func() time.Time { return time.Now().Add(11 * time.Second) }
+	if _, _, err := refresher.Rotate(ctx, stolen); !errors.Is(err, auth.ErrInvalidRefreshToken) {
+		t.Fatalf("Rotate() of a token used 11s ago = %v, want ErrInvalidRefreshToken", err)
+	}
+	if _, _, err := refresher.Rotate(ctx, current); !errors.Is(err, auth.ErrInvalidRefreshToken) {
+		t.Errorf("Rotate() of the current token after the reuse = %v, want the session revoked", err)
 	}
 }

@@ -79,6 +79,10 @@ type AuthConfig struct {
 	JwtIssuer         string
 	TokenExpiration   time.Duration
 	RefreshExpiration time.Duration
+
+	// RefreshReuseGrace is how long after its first use a refresh token is
+	// still accepted. Zero, the default, ends the session on any second use.
+	RefreshReuseGrace time.Duration
 }
 
 // CORSConfig lists the origins allowed to call the API from a browser. The
@@ -204,6 +208,7 @@ func Load() (*Config, error) {
 			JwtIssuer:         l.String(envJWTIssuer, defaultJWTIssuer),
 			TokenExpiration:   l.Duration(envJWTTokenExpiration, defaultTokenExpiration),
 			RefreshExpiration: l.Duration(envJWTRefreshExpiration, defaultRefreshExpiration),
+			RefreshReuseGrace: l.Duration(envJWTRefreshReuseGrace, 0),
 		},
 		Environment: environment,
 		Runtime: RuntimeConfig{
@@ -308,6 +313,9 @@ func (c *Config) Validate() error {
 
 	// A refresh token that expires before the access token it renews can never
 	// be used, which surfaces as users being logged out at random.
+	if c.Auth.RefreshReuseGrace < 0 {
+		errs = append(errs, fmt.Errorf("%s: must not be negative, got %s", envJWTRefreshReuseGrace, c.Auth.RefreshReuseGrace))
+	}
 	if c.Auth.RefreshExpiration <= c.Auth.TokenExpiration {
 		errs = append(errs, fmt.Errorf("%s (%s) must be longer than %s (%s)",
 			envJWTRefreshExpiration, c.Auth.RefreshExpiration, envJWTTokenExpiration, c.Auth.TokenExpiration))

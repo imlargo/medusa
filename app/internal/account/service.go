@@ -52,11 +52,15 @@ type Service struct {
 // issues refresh tokens valid for refreshTTL. A refresh token is an opaque
 // value kept in the store, not a signed token: it cannot be used as an
 // access token, and it can be revoked.
-func NewService(store *store.Store, tokens *auth.JWT[int64], accessTTL, refreshTTL time.Duration) *Service {
+//
+// reuseGrace is how long after its first use a refresh token is still
+// accepted, for clients that refresh from several requests at once. Zero
+// treats every second use as a stolen token.
+func NewService(store *store.Store, tokens *auth.JWT[int64], accessTTL, refreshTTL, reuseGrace time.Duration) *Service {
 	return &Service{
 		store:     store,
 		tokens:    tokens,
-		refresher: auth.NewRefresher(store.Sessions, refreshTTL),
+		refresher: auth.NewRefresher(store.Sessions, refreshTTL, auth.WithReuseGrace(reuseGrace)),
 		accessTTL: accessTTL,
 	}
 }

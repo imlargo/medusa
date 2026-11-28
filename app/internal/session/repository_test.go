@@ -40,19 +40,23 @@ func TestConsumeReportsTheSecondUse(t *testing.T) {
 		t.Fatalf("Create() = %v", err)
 	}
 
-	got, reused, err := repo.Consume(ctx, "h1")
-	if err != nil || reused {
-		t.Fatalf("first Consume() = reused %v, %v, want false, nil", reused, err)
+	got, err := repo.Consume(ctx, "h1")
+	if err != nil || got.Reused {
+		t.Fatalf("first Consume() = reused %v, %v, want false, nil", got.Reused, err)
 	}
 	if got.Family != "f1" || got.Subject != subject || !got.ExpiresAt.Equal(expires) {
 		t.Errorf("token = %+v, want what was stored", got)
 	}
 
-	if _, reused, err := repo.Consume(ctx, "h1"); err != nil || !reused {
-		t.Errorf("second Consume() = reused %v, %v, want true, nil", reused, err)
+	again, err := repo.Consume(ctx, "h1")
+	if err != nil || !again.Reused {
+		t.Errorf("second Consume() = reused %v, %v, want true, nil", again.Reused, err)
+	}
+	if again.UsedAgo < 0 || again.UsedAgo > time.Minute {
+		t.Errorf("UsedAgo = %s, want the moments since the first use", again.UsedAgo)
 	}
 
-	if _, _, err := repo.Consume(ctx, "unknown"); !errors.Is(err, auth.ErrRefreshTokenNotFound) {
+	if _, err := repo.Consume(ctx, "unknown"); !errors.Is(err, auth.ErrRefreshTokenNotFound) {
 		t.Errorf("Consume() of an unknown hash = %v, want ErrRefreshTokenNotFound", err)
 	}
 }
@@ -72,11 +76,11 @@ func TestRevokeFamilyRemovesOnlyThatFamily(t *testing.T) {
 		t.Fatalf("RevokeFamily() = %v", err)
 	}
 	for _, hash := range []string{"a1", "a2"} {
-		if _, _, err := repo.Consume(ctx, hash); !errors.Is(err, auth.ErrRefreshTokenNotFound) {
+		if _, err := repo.Consume(ctx, hash); !errors.Is(err, auth.ErrRefreshTokenNotFound) {
 			t.Errorf("Consume(%s) after revoking its family = %v, want ErrRefreshTokenNotFound", hash, err)
 		}
 	}
-	if _, _, err := repo.Consume(ctx, "b1"); err != nil {
+	if _, err := repo.Consume(ctx, "b1"); err != nil {
 		t.Errorf("Consume() of another family = %v, want nil", err)
 	}
 }
@@ -92,7 +96,40 @@ func TestDeleteExpiredKeepsLiveTokens(t *testing.T) {
 	if deleted, err := repo.DeleteExpired(ctx); err != nil || deleted != 1 {
 		t.Errorf("DeleteExpired() = %d, %v, want 1", deleted, err)
 	}
-	if _, _, err := repo.Consume(ctx, "live"); err != nil {
+	if _, err := repo.Consume(ctx, "live"); err != nil {
 		t.Errorf("the live token is gone: %v", err)
+	}
+}
+
+// The first use of a token retires the siblings it was issued with, so only
+// one line of a session continues after a burst.
+func TestConsumeRetiresTheTokensSiblings(t *testing.T) {
+	t.Parallel()
+	repo, subject := newRepository(t)
+	ctx := t.Context()
+
+	create := func(hash, parent string) {
+		t.Helper()
+		if err := repo.Create(ctx, auth.RefreshToken{Hash: hash, Family: "f", Parent: parent, Subject: subject, ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create("root", "")
+	create("kept", "root")
+	create("sibling", "root")
+	create("cousin", "other")
+	create("first", "") // no parent: nobody's sibling
+
+	if got, err := repo.Consume(ctx, "kept"); err != nil || got.Reused {
+		t.Fatalf("Consume(kept) = reused %v, %v, want a first use", got.Reused, err)
+	}
+
+	if got, err := repo.Consume(ctx, "sibling"); err != nil || !got.Reused {
+		t.Errorf("Consume(sibling) = reused %v, %v, want it retired with its sibling", got.Reused, err)
+	}
+	for _, hash := range []string{"cousin", "root", "first"} {
+		if got, err := repo.Consume(ctx, hash); err != nil || got.Reused {
+			t.Errorf("Consume(%s) = reused %v, %v, want it untouched", hash, got.Reused, err)
+		}
 	}
 }
