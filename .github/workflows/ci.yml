@@ -117,11 +117,52 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # A migration is refused by Migrate when it is older than one already
+  # applied. Two branches adding migrations produce exactly that, when the
+  # one with the earlier version merges last. This finds it on the branch,
+  # where renaming the file fixes it, instead of in the deploy step.
+  migrations:
+    name: migration order
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: New migrations sort after every migration on the base
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # A branch is compared with main; a push to main with what main was.
+          if [ "$GITHUB_REF_NAME" = "main" ]; then base="$BEFORE"; else base="origin/main"; fi
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "no base commit to compare with"
+            exit 0
+          fi
+
+          version() { basename "$1" | sed -e 's/_.*//' -e 's/^0*//'; }
+
+          latest=0
+          for file in $(git ls-tree -r --name-only "$base" | grep -E '/migrations/[^/]+\.sql$'); do
+            v="$(version "$file")"
+            if [ "${v:-0}" -gt "$latest" ]; then latest="$v"; fi
+          done
+
+          status=0
+          for file in $(git diff --name-only --diff-filter=A "$(git merge-base "$base" HEAD)" HEAD | grep -E '/migrations/[^/]+\.sql$'); do
+            v="$(version "$file")"
+            if [ "${v:-0}" -le "$latest" ]; then
+              echo "::error file=$file::its version $v does not sort after $latest, the latest migration on the base: rename it with a current timestamp"
+              status=1
+            fi
+          done
+          exit $status
+
   # The one check main's protection requires, so adding a module to the
   # matrices never needs a settings change.
   ci:
     if: always()
-    needs: [test, lint, vulncheck, docker]
+    needs: [test, lint, vulncheck, docker, migrations]
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed

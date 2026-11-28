@@ -130,8 +130,8 @@ Only the files the feature needs exist: `user` has no service or handler, `event
 
 Everything goes inside the feature that owns the table, `app/internal/<feature>/`.
 
-1. A migration in `migrations/`, named by timestamp so it sorts after every other feature's: `20261128153000_create_orders.sql`, starting with `-- +goose Up`. Never edit a migration that has been applied.
-2. The queries in `queries/x.sql`, each with `-- name: Name :one|:many|:exec`. They may read a table of another feature; they write only this feature's.
+1. A migration in `migrations/`, named by timestamp so it sorts after every other feature's: `20261128153000_create_orders.sql`, starting with `-- +goose Up`. Never edit a migration that has been applied. If CI's `migration order` job fails, another migration merged first with a later version: rename yours with a current timestamp. `migrate` refuses a migration older than one already applied.
+2. The queries in `queries/x.sql`, each with `-- name: Name :one|:many|:exec`. They may read a table of another feature; they write only this feature's. All SQL goes here: a write passed as a string to `Exec` in Go code fails CI.
 3. For the feature's first table:
    - `migrations.go` with `//go:embed migrations/*.sql` and `var Migrations embed.FS` (copy `user/migrations.go`);
    - the feature added to `migrations.FS` in `internal/database/migrations`;

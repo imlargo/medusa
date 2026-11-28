@@ -20,6 +20,14 @@ import (
 //	//go:embed *.sql
 //	var FS embed.FS
 //
+// A pending migration with a version lower than one already applied is an
+// error, and nothing is applied. It happens when two branches add
+// migrations and the one with the earlier version merges last. Applying it
+// anyway would give the database a history in an order no test database
+// ever had; rename the migration so it sorts last instead. A check in CI
+// that a branch's new migrations sort after everything on the main branch
+// catches it before the deploy does.
+//
 // Run it as its own deploy step, never on API startup. Two runs at once (two
 // deploys, or a retried job) are serialized by a Postgres advisory lock, so
 // the second waits and then finds nothing to apply. The lock lives in the
