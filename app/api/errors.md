@@ -6,7 +6,6 @@ Every error the API answers with, as the `code` of its RFC 9457 problem. Generat
 |---|---|---|---|
 | `account.invalid_credentials` | 401 | unauthenticated | invalid email or password |
 | `account.password_hash_failed` | 500 | internal | could not process the password |
-| `account.password_too_long` | 400 | invalid | the password must be at most 72 bytes long |
 | `account.token_issue_failed` | 500 | internal | could not issue the session tokens |
 | `auth.insufficient_scope` | 403 | permission_denied | this action is not allowed for these credentials |
 | `auth.invalid_api_key` | 401 | unauthenticated | invalid API key |
@@ -15,6 +14,9 @@ Every error the API answers with, as the `code` of its RFC 9457 problem. Generat
 | `auth.malformed_credentials` | 401 | unauthenticated | the authorization header must be 'Bearer &lt;token&gt;' |
 | `auth.missing_credentials` | 401 | unauthenticated | the authorization header is missing |
 | `events.publish_failed` | 500 | internal | could not publish the event |
+| `password.breached` | 400 | invalid | this password has appeared in a data breach: choose another one |
+| `password.too_long` | 400 | invalid | the password must be at most 128 characters long |
+| `password.too_short` | 400 | invalid | the password must be at least 12 characters long |
 | `request.body_too_large` | 413 | too_large | the request body is too large |
 | `request.invalid_cursor` | 400 | invalid | the cursor is not valid: start again without one |
 | `request.invalid_parameter` | 400 | invalid | a path or query parameter is invalid |

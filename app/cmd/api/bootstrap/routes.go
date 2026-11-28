@@ -9,6 +9,7 @@ import (
 
 	"github.com/imlargo/medusa/api"
 	"github.com/imlargo/medusa/auth"
+	"github.com/imlargo/medusa/auth/password"
 	"github.com/imlargo/medusa/middleware"
 
 	"github.com/imlargo/medusa/app/internal/account"
@@ -149,7 +150,7 @@ func registerAccountRoutes(g apiGroups, c *Container) {
 		api.Summary("Create an account"),
 		api.Description("Creates an account and signs it in."),
 		api.Status(http.StatusCreated),
-		api.Errors(user.ErrEmailTaken, account.ErrPasswordTooLong),
+		api.Errors(user.ErrEmailTaken, password.ErrTooShort, password.ErrTooLong),
 	)
 	api.Post(g.public, "/auth/login", h.Login,
 		api.Summary("Sign in"),

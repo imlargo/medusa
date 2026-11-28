@@ -53,6 +53,14 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error
 	return toUser(row), nil
 }
 
+// SetPassword replaces the stored hash of the account's password.
+func (r *Repository) SetPassword(ctx context.Context, id int64, passwordHash string) error {
+	if err := r.queries(ctx).UpdateUserPassword(ctx, db.UpdateUserPasswordParams{ID: id, Password: passwordHash}); err != nil {
+		return classify("set user password", err)
+	}
+	return nil
+}
+
 // Delete removes the account with id.
 func (r *Repository) Delete(ctx context.Context, id int64) error {
 	if err := r.queries(ctx).DeleteUser(ctx, id); err != nil {

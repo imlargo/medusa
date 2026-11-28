@@ -33,7 +33,6 @@ What still stands between it and large production use, in order:
 
 1. No tracing (3.3). Request IDs already reach every log line (3.2).
 2. Per-process state: rate limits and SSE (phase 4).
-3. Passwords are hashed with bcrypt and have no policy (1.2, D2).
 
 Closed since the review: access and refresh tokens told apart (1.1), the caller in the context with scopes (1.5), a job queue (2.4), shutdown coordinated with readiness (1.6), a deadline on every request (1.7), secure headers (1.8), the error catalog (1.4), and `storage` and `env` as batteries (2.7, 2.2).
 
@@ -78,7 +77,7 @@ Each item has an ID for its issue, a size (S: under a day, M: days, L: a week or
 | ID | Item | Size | Depends on | Status |
 |---|---|---|---|---|
 | 1.1 | **Access and refresh tokens told apart**: refresh tokens are opaque values in the app's store, rotated by `auth.Refresher`, with `POST /v1/auth/refresh` and `/v1/auth/logout` (D1). | M | 0.6 | Done, unreleased |
-| 1.2 | **Password policy** at registration, as a rule with its declared error. Decided (D2); not built yet. | S | | |
+| 1.2 | **Password policy** at registration, as a rule with its declared error. | S | | Done: `auth/password` (argon2id, 12 to 128 characters, bcrypt hashes upgraded at sign-in) |
 | 1.3 | **Server timeouts**: read, write and idle defaults in `httpserver`; long routes extend their own deadline | M | | Done |
 | 1.4 | **Error code catalog**: a test that finds every declared `apperr` error, fails on duplicate codes, and generates `app/api/errors.md`. It later feeds the error responses in the OpenAPI spec (2.1). | M | | Done (`apperr.Declared`, `TestErrorCatalog`) |
 | 1.5 | **The caller in `context.Context`**: `auth` puts a `Principal` (subject, tenant or workspace, scopes, method) in the request context, so services and jobs see who acts, and `auth.Require(scopes...)` guards routes. A job carries the principal that enqueued it. Casbin, OpenFGA or Cerbos stay recipes, not batteries. | M | | Done (ADR 0005), unreleased |

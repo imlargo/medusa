@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/imlargo/medusa/auth"
+	"github.com/imlargo/medusa/auth/password"
 	"github.com/imlargo/medusa/postgres/pgtest"
 	"github.com/imlargo/medusa/postgres/queue"
 
@@ -59,12 +60,18 @@ func TestAccountFlow(t *testing.T) {
 		router.ServeHTTP(rec, req)
 		return rec.Code
 	}
-	status, body := send(http.MethodPost, "/v1/auth/register", `{"email":"Ada@Example.com","password":"correct horse"}`, "")
+	// The password policy answers with its own code, before anything is stored.
+	status, body := send(http.MethodPost, "/v1/auth/register", `{"email":"Ada@Example.com","password":"short"}`, "")
+	if status != http.StatusBadRequest || body["code"] != password.ErrTooShort.Code() {
+		t.Errorf("register with a short password = %d %v, want 400 %s", status, body, password.ErrTooShort.Code())
+	}
+
+	status, body = send(http.MethodPost, "/v1/auth/register", `{"email":"Ada@Example.com","password":"correct horse"}`, "")
 	if status != http.StatusCreated {
 		t.Fatalf("register = %d %v, want 201", status, body)
 	}
 
-	status, body = send(http.MethodPost, "/v1/auth/register", `{"email":"ada@example.com","password":"another one"}`, "")
+	status, body = send(http.MethodPost, "/v1/auth/register", `{"email":"ada@example.com","password":"another passphrase"}`, "")
 	if status != http.StatusConflict || body["code"] != user.ErrEmailTaken.Code() {
 		t.Errorf("register again = %d %v, want 409 %s", status, body, user.ErrEmailTaken.Code())
 	}

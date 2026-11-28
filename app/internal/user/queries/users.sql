@@ -14,3 +14,8 @@ WHERE email = $1;
 -- name: DeleteUser :exec
 DELETE FROM users
 WHERE id = $1;
+
+-- name: UpdateUserPassword :exec
+UPDATE users
+SET password = $2, updated_at = now()
+WHERE id = $1;
