@@ -6,6 +6,7 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ### Added
 
+- `WithQueryObserver`: a function called around every statement, with its text and its error. It is how a tracing library joins in without this module importing one.
 - `postgres/flagstore`: feature flags in a table (`Install`, `Load`, `Set`, `Delete`), the store behind the core's `flags` package.
 
 ## [0.3.0] - 2026-11-28

@@ -12,6 +12,7 @@ import (
 	"github.com/imlargo/medusa/postgres"
 	"github.com/imlargo/medusa/postgres/events"
 	"github.com/imlargo/medusa/postgres/queue"
+	"github.com/imlargo/medusa/tracing"
 )
 
 // Store is the database as the features share it.
@@ -32,14 +33,16 @@ func NewJobs(pool postgres.Conn) *queue.Client {
 	return queue.New(pool, queue.WithCorrelationID(medusa.RequestIDFrom), queue.WithMetadata(callerMetadata))
 }
 
-// callerMetadata is what a job remembers about who caused it, so its
-// handler runs as the same subject and tenant (see bootstrap/worker.go).
+// callerMetadata is what a job remembers about what caused it: who, so its
+// handler runs as the same subject and tenant, and which trace, so its span
+// continues it (see bootstrap/worker.go).
 func callerMetadata(ctx context.Context) map[string]string {
-	caller, ok := auth.PrincipalFrom(ctx)
-	if !ok {
-		return nil
+	metadata := map[string]string{}
+	if caller, ok := auth.PrincipalFrom(ctx); ok {
+		metadata = caller.Metadata()
 	}
-	return caller.Metadata()
+	tracing.Inject(ctx, metadata)
+	return metadata
 }
 
 // WithTx runs fn in one transaction, which travels in the context fn

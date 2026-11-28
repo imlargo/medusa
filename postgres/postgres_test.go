@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -114,5 +115,31 @@ func TestPoolSettingsInTheURLWinOverTheDefaults(t *testing.T) {
 	}
 	if tuned.MaxConnIdleTime != DefaultConnMaxIdleTime {
 		t.Errorf("MaxConnIdleTime = %s, want the default", tuned.MaxConnIdleTime)
+	}
+}
+
+// The observer is what tracing hangs on: it sees each statement start and
+// end, with the error, and the context it returns is the statement's.
+func TestTheQueryObserverSeesEachStatementStartAndEnd(t *testing.T) {
+	type observedKey struct{}
+	var (
+		statement string
+		ended     error
+		calls     int
+	)
+	tracer := &queryTracer{logger: slog.New(slog.DiscardHandler), observer: func(ctx context.Context, sql string) (context.Context, func(error)) {
+		statement = sql
+		return context.WithValue(ctx, observedKey{}, true), func(err error) { calls++; ended = err }
+	}}
+
+	failed := errors.New("relation does not exist")
+	ctx := tracer.TraceQueryStart(t.Context(), nil, pgx.TraceQueryStartData{SQL: "SELECT 1", Args: []any{"secret"}})
+	if ctx.Value(observedKey{}) != true {
+		t.Error("the statement does not run with the context the observer returned")
+	}
+	tracer.TraceQueryEnd(ctx, nil, pgx.TraceQueryEndData{Err: failed})
+
+	if statement != "SELECT 1" || calls != 1 || !errors.Is(ended, failed) {
+		t.Errorf("observer saw %q, ended %d times with %v, want the statement and its error once", statement, calls, ended)
 	}
 }

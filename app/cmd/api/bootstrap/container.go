@@ -21,6 +21,7 @@ import (
 	"github.com/imlargo/medusa/metrics"
 	"github.com/imlargo/medusa/postgres"
 	"github.com/imlargo/medusa/storage"
+	"github.com/imlargo/medusa/tracing"
 
 	"github.com/imlargo/medusa/app/internal/account"
 	"github.com/imlargo/medusa/app/internal/config"
@@ -78,6 +79,9 @@ type Container struct {
 	// are disabled.
 	MetricsRegistry *prometheus.Registry
 
+	// serviceName is what the process is called in its traces.
+	serviceName string
+
 	// closers releases resources in reverse order of acquisition.
 	closers []func() error
 }
@@ -117,9 +121,30 @@ func MinimalOptions() Options {
 }
 
 // newLogger is the process logger: JSON on stderr, info and above, with the
-// request ID on every line logged with a request's context.
+// request ID and the trace on every line logged with a request's context.
 func newLogger() *slog.Logger {
-	return slog.New(medusa.LogHandler(slog.NewJSONHandler(os.Stderr, nil)))
+	return slog.New(tracing.LogHandler(medusa.LogHandler(slog.NewJSONHandler(os.Stderr, nil))))
+}
+
+// tracingStopTimeout bounds sending the last spans when the process exits.
+const tracingStopTimeout = 5 * time.Second
+
+// StartTracing traces the process as serviceName. Spans go to the OTLP
+// endpoint in OTEL_EXPORTER_OTLP_ENDPOINT; without one nothing is traced.
+// The spans not yet sent are flushed when the container closes.
+func (c *Container) StartTracing(ctx context.Context, serviceName string) error {
+	shutdown, err := tracing.Setup(ctx, tracing.Config{ServiceName: serviceName})
+	if err != nil {
+		return err
+	}
+	c.serviceName = serviceName
+
+	c.onClose(func() error {
+		stopCtx, cancel := context.WithTimeout(context.Background(), tracingStopTimeout)
+		defer cancel()
+		return shutdown(stopCtx)
+	})
+	return nil
 }
 
 // NewContainer wires all dependencies. On failure it closes whatever was
@@ -155,6 +180,8 @@ func (c *Container) initInfrastructure(ctx context.Context, opts Options) error 
 	db, err := postgres.Open(ctx, cfg.Database.URL, c.Logger,
 		// Statement logging only outside production: it writes user data.
 		postgres.WithQueryLogging(!cfg.Environment.IsProduction()),
+		// A span per statement, inside the request or the job that ran it.
+		postgres.WithQueryObserver(tracing.QueryObserver),
 	)
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/imlargo/medusa/metrics"
 	"github.com/imlargo/medusa/postgres/events"
 	"github.com/imlargo/medusa/postgres/queue"
+	"github.com/imlargo/medusa/tracing"
 
 	"github.com/imlargo/medusa/app/internal/account"
 	"github.com/imlargo/medusa/app/internal/config"
@@ -42,6 +44,9 @@ func NewWorker(ctx context.Context, name string) (*App, error) {
 	container, err := NewContainer(ctx, cfg, MinimalOptions())
 	if err != nil {
 		return nil, fmt.Errorf("initialize %s: %w", name, err)
+	}
+	if err := container.StartTracing(ctx, name); err != nil {
+		return nil, errors.Join(fmt.Errorf("initialize %s: %w", name, err), container.Close())
 	}
 
 	jobs := store.NewJobs(container.DB)
@@ -69,10 +74,12 @@ func NewWorker(ctx context.Context, name string) (*App, error) {
 			if caller, ok := auth.PrincipalFromMetadata(job.Metadata); ok {
 				ctx = auth.WithPrincipal(ctx, caller)
 			}
-			return ctx
+			// The job's span continues the trace of whatever enqueued it.
+			return tracing.StartJob(ctx, job.Kind, job.Queue, job.Metadata)
 		}),
-		queue.WithOnFinish(func(_ context.Context, job *queue.Job, took time.Duration, err error) {
+		queue.WithOnFinish(func(ctx context.Context, job *queue.Job, took time.Duration, err error) {
 			jobMetrics.ObserveRun(job.Queue, job.Kind, job.Waited, took, err)
+			tracing.EndJob(ctx, err)
 		}),
 	)
 	registerJobs(worker, jobs, container)
