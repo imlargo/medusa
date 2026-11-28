@@ -79,7 +79,7 @@ Each item has an ID for its issue, a size (S: under a day, M: days, L: a week or
 | ID | Item | Size | Depends on | Status |
 |---|---|---|---|---|
 | 1.1 | **Access and refresh tokens told apart**: refresh tokens are opaque values in the app's store, rotated by `auth.Refresher`, with `POST /v1/auth/refresh` and `/v1/auth/logout` (D1). | M | 0.6 | Done, unreleased |
-| 1.2 | **Password policy** at registration, as a rule with its declared error. Needs D2. | S | | |
+| 1.2 | **Password policy** at registration, as a rule with its declared error. Decided (D2); not built yet. | S | | |
 | 1.3 | **Server timeouts**: read, write and idle defaults in `httpserver`; long routes extend their own deadline | M | | Done |
 | 1.4 | **Error code catalog**: a test that finds every declared `apperr` error, fails on duplicate codes, and generates `app/api/errors.md`. It later feeds the error responses in the OpenAPI spec (2.1). | M | | Done (`apperr.Declared`, `TestErrorCatalog`) |
 | 1.5 | **The caller in `context.Context`**: `auth` puts a `Principal` (subject, tenant or workspace, scopes, method) in the request context, so services and jobs see who acts, and `auth.Require(scopes...)` guards routes. A job carries the principal that enqueued it. Casbin, OpenFGA or Cerbos stay recipes, not batteries. | M | | Done (ADR 0005), unreleased |
@@ -93,7 +93,7 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 
 | ID | Item | Size | Depends on |
 |---|---|---|---|
-| 2.1 | **`api` battery: typed operations, FastAPI style.** One input struct (path, query, header and body tags) drives binding, validation, OpenAPI 3.1 served at startup, security schemes and the error responses. Built on Huma through its Gin adapter, so Gin stays the router and routes move one at a time; `apperr` renders through Huma's error hook. Replaces swag and `make docs`. Needs D3. | L | 1.4 |
+| 2.1 | **`api` battery: typed operations, FastAPI style.** One input struct (path, query, header and body tags) drives binding, validation, OpenAPI 3.1 served at startup, security schemes and the error responses. Built on Huma through its Gin adapter, so Gin stays the router and routes move one at a time; `apperr` renders through Huma's error hook. Replaces swag and `make docs`. Routes answer with the resource itself, without the `{success, message, data}` envelope (decided 2026-11-28). | L | 1.4 |
 | 2.2 | **`env`** (named so it does not clash with the app's `config`): env loading with a `.env` fallback, typed getters, one error listing every problem. Extracted from `app/internal/config`. `cmd/migrate` stops needing `JWT_SECRET`. Done. | M | |
 | 2.3 | **Auth battery v1**, split so heavy dependencies stay opt-in. Needs D1, D2, D6. `auth/oidc` is its own module. **Never built:** an authorization server or OIDC provider, SAML, SCIM, our own crypto, or a user admin UI. Apps that need SSO or share one login across apps use an IdP (Zitadel, Ory, Keycloak) and only the verifier. | L | 1.5 |
 | 2.4 | **`queue` battery**: Postgres jobs enqueued in the same transaction as the write that causes them, with leases, retries with backoff, a visible failed state, concurrency per queue, and metrics for depth, age and wait. The app template gains `cmd/worker`. Written here on `SKIP LOCKED` with lease tokens (D7, ADR 0004), not on River. Done as `postgres/queue` with cron schedules, `Failed`/`Retry` and Prometheus metrics (`postgres/v0.2.0`; `metrics.NewJobs` is in the core, unreleased). | L | |
@@ -181,11 +181,13 @@ These are imlargo's to make. Each blocks the item next to it, and nothing else.
 | ID | Decision | Recommendation | Blocks |
 |---|---|---|---|
 | D1 | Refresh tokens: format, rotation, revocation, lifetime | Decided (2026-11-27): opaque, stored hashed, rotated on every use, the whole family revoked when an old one comes back | 1.1, 2.3 |
-| D2 | Password policy | NIST SP 800-63B-4 (check its SHALL/SHOULD wording first): a long minimum, a maximum of at least 64, no composition rules, a blocklist of breached passwords | 1.2, 2.3 |
+| D2 | Password policy | Decided (2026-11-28): argon2id, at least 12 characters, at most 128, no composition rules; a breached-password list is a hook the application can connect | 1.2, 2.3 |
 | D3 | OpenAPI: Huma, oapi-codegen or swag v2 | Decided (2026-11-27): Huma through `humagin`, behind the `api` battery | 2.1, 5.3 |
 | D4 | Where the kit lives: the core module, or its own module | | 3.1 |
 | D5 | Is the app deployed with real clients? | Decided: no. The app is the example built on Medusa, never deployed | 0.5 |
 | D6 | Auth scope: which logins Medusa ships (password, OIDC providers, passkeys) and when an app must use an external IdP instead | Decided (2026-11-27): password and OIDC in v1, passkeys next; IdP for SSO and shared logins | 2.3 |
+| D8 | Do routes on the `api` battery keep the `{success, message, data}` envelope? | Decided (2026-11-28): no. A route answers with the resource; the status code says how it went; a list answers `{items, next_cursor}` | 2.1 |
+| D9 | OpenTelemetry as a dependency of an `otel` battery | Decided (2026-11-28): yes, after 2.1 | 3.3 |
 | D7 | The `queue` battery: River (MPL-2.0, Postgres only), or written here on `SKIP LOCKED` with leases | Decided (2026-11-27): written here, with the lease-token semantics Butter's two implementations already run (its ADR 0004). No new dependency | 2.4, 2.13, 4.1 |
 
 ## How the work runs

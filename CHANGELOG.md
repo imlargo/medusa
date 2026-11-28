@@ -4,6 +4,8 @@ All notable changes to the Medusa core (`github.com/imlargo/medusa`). Each batte
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-28
+
 ### Changed
 
 - `WriteError` records the whole application error (code, message and cause) in Gin's error list, and does so for every 5xx, where it recorded only the cause and only when there was one. The access log's `error` field reads `code: message: cause`.
@@ -46,6 +48,7 @@ The first release of Medusa as a toolkit. `v0.0.1` was an application template; 
 - `job`: periodic background work owned by `lifecycle`.
 - `metrics`: Prometheus HTTP metrics on an injected registry.
 
-[Unreleased]: https://github.com/imlargo/medusa/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/imlargo/medusa/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/imlargo/medusa/releases/tag/v0.3.0
 [0.2.0]: https://github.com/imlargo/medusa/releases/tag/v0.2.0
 [0.1.0]: https://github.com/imlargo/medusa/releases/tag/v0.1.0
