@@ -49,5 +49,18 @@ jobs:
           LATEST: ${{ !contains(github.ref_name, '/') }}
         run: gh release create "$GITHUB_REF_NAME" --verify-tag --latest="$LATEST" --title "${{ steps.module.outputs.module }} ${{ steps.module.outputs.version }}" --notes-file notes.md
 
+      # The proxy fetches the tag from GitHub the first time it is asked. That
+      # fetch sometimes fails on its side, and the proxy then answers "not
+      # found" for a while, so ask again for a few minutes. The release is
+      # already made by then: a proxy that stays behind is a warning, and the
+      # version appears on the next go get of it.
       - name: Publish to the Go proxy
-        run: curl -fsS "https://proxy.golang.org/${{ steps.module.outputs.module }}/@v/${{ steps.module.outputs.version }}.info"
+        run: |
+          url="https://proxy.golang.org/${{ steps.module.outputs.module }}/@v/${{ steps.module.outputs.version }}.info"
+          for attempt in $(seq 1 20); do
+            if curl -fsS "$url"; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::warning::the Go proxy does not serve ${{ steps.module.outputs.version }} yet; it will once it can fetch the tag"
