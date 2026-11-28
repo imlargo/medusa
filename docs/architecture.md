@@ -178,7 +178,7 @@ flowchart LR
 - **Retries.** A handler's error sends the job back after a growing wait (5 s, 10 s, 20 s... up to 10 minutes). Out of attempts (3 by default), it stays in `medusa_jobs` as `failed` with its `last_error`.
 - **At least once.** A job can run twice, so handlers are safe to repeat.
 - **The request ID follows.** A job keeps the ID of the request that enqueued it, and the worker's logs carry it.
-- **Clock jobs** (`worker.Schedule` with a cron expression in UTC, `worker.Periodic` with an interval) are enqueued by every replica with one key per time slot, so each slot runs once.
+- **Clock jobs** (`worker.Schedule` with a cron expression in UTC, `worker.Periodic` with an interval) are enqueued by every replica with one key per time slot, so each slot runs once. A schedule with `CatchUp` has the slot a deploy skipped made up when a worker starts.
 - **Metrics.** The worker serves `/metrics` and `/health` on `WORKER_PORT` (8001): depth and oldest age per queue, read at scrape time, and wait and run time per kind.
 - **Failed jobs** are listed with `Failed` and put back with `Retry`.
 - **Shutdown.** The worker stops claiming, waits `SHUTDOWN_TIMEOUT` for running jobs, and hands the rest back without spending their attempt.

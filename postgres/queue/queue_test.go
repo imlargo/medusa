@@ -652,3 +652,65 @@ func TestAStalledWorkerMakesUpTheMinutesItSkipped(t *testing.T) {
 		t.Errorf("jobs = %d, want the 3 minutes since the last tick", jobs)
 	}
 }
+
+// A deploy that has no worker up at 06:35 must not cost the daily run.
+func TestAWorkerMakesUpTheLatestSlotItsDowntimeMissed(t *testing.T) {
+	t.Parallel()
+	c, pool := newClient(t)
+	ctx := t.Context()
+
+	w := fastWorker(c, Queues{DefaultQueue: 1})
+	w.Schedule("daily", "35 6 * * *", nil, CatchUp(2*time.Hour))
+	w.Schedule("often", "*/5 * * * *", nil, CatchUp(2*time.Hour))
+	w.Schedule("no_catch_up", "35 6 * * *", nil)
+
+	count := func(kind string) (jobs int) {
+		t.Helper()
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM medusa_jobs WHERE kind = $1", kind).Scan(&jobs); err != nil {
+			t.Fatal(err)
+		}
+		return jobs
+	}
+
+	// The worker starts at 07:50: 06:35 is inside the window.
+	start := time.Date(2026, 11, 27, 7, 50, 0, 0, time.UTC)
+	if !w.enqueueMissed(ctx, start) {
+		t.Fatal("enqueueMissed() = false, want every schedule handled")
+	}
+	if got := count("daily"); got != 1 {
+		t.Errorf("daily jobs = %d, want the 06:35 run made up", got)
+	}
+	if got := count("often"); got != 1 {
+		t.Errorf("often jobs = %d, want only its most recent slot, not the 24 in the window", got)
+	}
+	if got := count("no_catch_up"); got != 0 {
+		t.Errorf("jobs of a schedule without CatchUp = %d, want 0", got)
+	}
+
+	var key string
+	if err := pool.QueryRow(ctx, "SELECT unique_key FROM medusa_jobs WHERE kind = 'daily'").Scan(&key); err != nil {
+		t.Fatal(err)
+	}
+	if want := "schedule:daily:2026-11-27T06:35:00Z"; key != want {
+		t.Errorf("unique_key = %q, want %q: the slot's own key, so a replica cannot repeat it", key, want)
+	}
+
+	// A second replica starting later finds the slot taken.
+	w.enqueueMissed(ctx, start.Add(time.Minute))
+	if got := count("daily"); got != 1 {
+		t.Errorf("daily jobs after a second start = %d, want still 1", got)
+	}
+
+	// Past the window the run is too old to be worth making up.
+	late, _ := newClient(t)
+	lw := fastWorker(late, Queues{DefaultQueue: 1})
+	lw.Schedule("daily", "35 6 * * *", nil, CatchUp(2*time.Hour))
+	lw.enqueueMissed(ctx, time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC))
+	var lateJobs int
+	if err := late.conn.QueryRow(ctx, "SELECT count(*) FROM medusa_jobs").Scan(&lateJobs); err != nil {
+		t.Fatal(err)
+	}
+	if lateJobs != 0 {
+		t.Errorf("jobs made up outside the window = %d, want 0", lateJobs)
+	}
+}
