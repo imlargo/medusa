@@ -36,6 +36,7 @@ Each is its own module, with its own dependencies and versions. Choosing one is 
 |---|---|---|
 | `postgres` | `Open` (pool, ping, slow query log), `Migrate` (goose over any `fs.FS`), `Conn` (pool or transaction), `IsNoRows`, `IsUniqueViolation` | pgx v5, goose |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh migrated database per test on `TEST_DATABASE_URL` | (same module) |
+| `postgres/events` | Events to several consumers through the queue: published in the writer's transaction, one retried delivery per subscriber | (same module) |
 | `postgres/queue` | A job queue: enqueued in the caller's transaction, claimed with leases, retried, periodic jobs once per cluster | (same module) |
 | `auth` | The caller as a `Principal` in the context: bearer tokens (`JWT[S]`) and API keys per client tried in order, scopes with `Require`, the tenant per request with `Enrich` | golang-jwt v5 |
 | `storage` | S3-compatible object storage (Cloudflare R2): uploads (sized, streamed, presigned), downloads, head, copy, list, bulk delete, key validation | AWS SDK v2 |

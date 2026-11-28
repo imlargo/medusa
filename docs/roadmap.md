@@ -51,7 +51,7 @@ Butter's backend is being designed on Medusa as three deployables: `api` (HTTP, 
 | b | Service-to-service auth: keys per client, signed callbacks (done) | 2.12 | #26 |
 | b | Inbound webhooks verified and stored before processing (done) | 2.9 | #27 |
 | b | Observability beyond HTTP (error reporting and the correlation ID done; tracing last) | 3.3, 3.5 | #28 |
-| c | Events through a transactional outbox | 2.13 | #29 |
+| c | Events through a transactional outbox (done) | 2.13 | #29 |
 | c | More than one replica: `redis`, rate limits, SSE, websockets | 2.5, 4.2, 4.3, 4.5 | #30 |
 | c | Module boundaries at scale | 2.14 | #31 |
 | c | The API contract: typed input, idempotency, cursors, docs | 2.1, 5.1, 5.2, 5.3 | #32 |
@@ -105,7 +105,7 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 | 2.10 | **`mail`**: a `Sender` interface, SMTP (wneessen/go-mail) and a development sender that logs, sent as `queue` jobs. | S | 2.4 |
 | 2.11 | **`storage` for uploads that skip the API**: presigned PUT, upload of a stream of unknown size (multipart), `Head` and `Exists`, `Copy`, `List` by prefix. Done (`storage/v0.2.0`). Presigned multipart for browsers is not built: Butter's largest upload is 1 GB, and a single PUT takes 5 GiB. | M | |
 | 2.12 | **Service-to-service auth**: API keys per client (a key store, not one static key) with the client as the `Principal`, and signed callbacks between services (HMAC over the body with a timestamp, the Standard Webhooks scheme of 2.9). Done: `auth.APIKeys` and `webhook.Signer`/`Verifier`. | M | 1.5 |
-| 2.13 | **`events`: a transactional outbox with several consumers per event.** A fact is written in the same transaction as the change; a dispatcher delivers it at least once to each registered handler, retried independently and idempotent by event and handler. On top of `queue`. | L | 2.4 |
+| 2.13 | **`events`: a transactional outbox with several consumers per event.** A fact is written in the same transaction as the change; a dispatcher delivers it at least once to each registered handler, retried independently and idempotent by event and handler. On top of `queue`. Done as `postgres/events` (ADR 0006), unreleased. | L | 2.4 |
 | 2.14 | **Module boundaries at scale**: each feature owns its tables, queries and migrations (one sqlc package per feature, no single `store.Store` that imports them all), with a lint rule that fails a feature importing another's storage. | L | |
 | 2.15 | **Feature flags**: evaluated per request and per job, by tenant and percentage. OpenFeature behind a small interface, or a recipe: to decide with the first flag Butter's migration needs. | S | |
 

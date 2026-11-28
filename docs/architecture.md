@@ -200,7 +200,9 @@ flowchart LR
 - **Failed jobs** are listed with `Failed` and put back with `Retry`.
 - **Shutdown.** The worker stops claiming, waits `SHUTDOWN_TIMEOUT` for running jobs, and hands the rest back without spending their attempt.
 
-The example app has one job: `account.welcome`, enqueued by registration.
+**Events** (`postgres/events`, ADR 0006) ride on the same queue. Publishing enqueues one job in the writer's transaction; a worker turns it into one job per subscriber, each retried on its own.
+
+The example app publishes one event, `account.registered`, which the `account.welcome` subscriber reacts to, and schedules one job, `account.purge_sessions`.
 
 `job.Every` remains for periodic work that belongs to one process (the app has none): no overlap, failures contained, canceled and awaited on shutdown, and run by every replica.
 

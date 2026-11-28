@@ -15,10 +15,12 @@ import (
 	"github.com/imlargo/medusa/httpserver"
 	"github.com/imlargo/medusa/lifecycle"
 	"github.com/imlargo/medusa/metrics"
+	"github.com/imlargo/medusa/postgres/events"
 	"github.com/imlargo/medusa/postgres/queue"
 
 	"github.com/imlargo/medusa/app/internal/account"
 	"github.com/imlargo/medusa/app/internal/config"
+	"github.com/imlargo/medusa/app/internal/store"
 )
 
 // workerConcurrency is how many jobs of the default queue one worker process
@@ -42,7 +44,7 @@ func NewWorker(ctx context.Context, name string) (*App, error) {
 		return nil, fmt.Errorf("initialize %s: %w", name, err)
 	}
 
-	jobs := queue.New(container.DB)
+	jobs := store.NewJobs(container.DB)
 
 	registry := prometheus.NewRegistry()
 	jobMetrics, err := metrics.NewJobs(registry, queueStats(jobs))
@@ -73,7 +75,7 @@ func NewWorker(ctx context.Context, name string) (*App, error) {
 			jobMetrics.ObserveRun(job.Queue, job.Kind, job.Waited, took, err)
 		}),
 	)
-	registerJobs(worker, container)
+	registerJobs(worker, jobs, container)
 
 	admin := httpserver.New(workerAdmin(registry), container.Logger,
 		httpserver.WithHost(cfg.Server.Host),
@@ -90,10 +92,12 @@ func NewWorker(ctx context.Context, name string) (*App, error) {
 	}, nil
 }
 
-// registerJobs installs the handler of every kind of job, the way
-// registerRoutes installs every route.
-func registerJobs(worker *queue.Worker, c *Container) {
-	queue.Register(worker, account.KindWelcome, account.Welcome(c.Logger))
+// registerJobs installs every subscriber and the handler of every kind of
+// job, the way registerRoutes installs every route.
+func registerJobs(worker *queue.Worker, jobs *queue.Client, c *Container) {
+	subscribers := events.NewSubscribers(jobs)
+	events.Subscribe(subscribers, account.EventRegistered, account.SubscriberWelcome, account.Welcome(c.Logger))
+	subscribers.Attach(worker)
 
 	// Daily, at a quiet hour. With CatchUp a deploy at that minute delays the
 	// run instead of skipping it; Coalesce keeps a backlog from repeating it.

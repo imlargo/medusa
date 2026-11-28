@@ -7,7 +7,6 @@ All notable changes to the Medusa core (`github.com/imlargo/medusa`). Each batte
 ### Changed
 
 - `WriteError` records the whole application error (code, message and cause) in Gin's error list, and does so for every 5xx, where it recorded only the cause and only when there was one. The access log's `error` field reads `code: message: cause`.
-- `webhook.Signer.NewRequest` sends the request ID of its context as `X-Request-ID`.
 
 ### Added
 
