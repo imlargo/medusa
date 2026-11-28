@@ -151,7 +151,7 @@ From "a set of packages" to "an app in 30 lines of `main`".
 |---|---|---|---|
 | 5.1 | **Cursor pagination**: opaque cursors next to page/offset | M | |
 | 5.2 | **`Idempotency-Key`** for unsafe methods, results stored in Postgres first | L | |
-| 5.3 | **Binding beyond the JSON body**: one typed input for path, query, header and body in the `Handle` adapters. Comes with 2.1 if D3 picks Huma; otherwise built on Gin's binding. | M | D3 |
+| 5.3 | **Binding beyond the JSON body**: one typed input for path, query, header and body in the `Handle` adapters. Comes with 2.1, on Huma (D3). | M | 2.1 |
 
 ### Phase 6: Tooling and adoption
 
@@ -183,7 +183,7 @@ These are imlargo's to make. Each blocks the item next to it, and nothing else.
 |---|---|---|---|
 | D1 | Refresh tokens: format, rotation, revocation, lifetime | Decided (2026-11-27): opaque, stored hashed, rotated on every use, the whole family revoked when an old one comes back | 1.1, 2.3 |
 | D2 | Password policy | NIST SP 800-63B-4 (check its SHALL/SHOULD wording first): a long minimum, a maximum of at least 64, no composition rules, a blocklist of breached passwords | 1.2, 2.3 |
-| D3 | OpenAPI: Huma, oapi-codegen or swag v2 | Huma through `humagin`, behind the `api` battery | 2.1 |
+| D3 | OpenAPI: Huma, oapi-codegen or swag v2 | Decided (2026-11-27): Huma through `humagin`, behind the `api` battery | 2.1, 5.3 |
 | D4 | Where the kit lives: the core module, or its own module | | 3.1 |
 | D5 | Is the app deployed with real clients? | Decided: no. The app is the example built on Medusa, never deployed | 0.5 |
 | D6 | Auth scope: which logins Medusa ships (password, OIDC providers, passkeys) and when an app must use an external IdP instead | Decided (2026-11-27): password and OIDC in v1, passkeys next; IdP for SSO and shared logins | 2.3 |

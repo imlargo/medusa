@@ -71,7 +71,7 @@ Then the first work for Butter's backend, Medusa's first consumer (2026-11-27):
 
 Released as the core `v0.2.0` and `storage/v0.2.0`.
 
-Decided on 2026-11-27: the queue is written in Medusa on `SKIP LOCKED` (D7), and auth v1 ships password and OIDC logins with opaque, rotating refresh tokens (D1, D6).
+Decided on 2026-11-27: the queue is written in Medusa on `SKIP LOCKED` (D7), auth v1 ships password and OIDC logins with opaque, rotating refresh tokens (D1, D6), and the API contract is built on Huma (D3).
 
 ## What's next
 
