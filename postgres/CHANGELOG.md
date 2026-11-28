@@ -10,6 +10,7 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ### Added
 
+- `queue.PanicError`: what a handler's panic becomes, with its stack, for `WithOnFinish`.
 - `queue.WithMetadata` and `Job.Metadata`: what a job records about the context it was enqueued from, such as who caused it, handed back to the handler. `Install` adds the column to an existing table.
 - `queue.CatchUp(window)` for `Worker.Schedule`: a worker that starts enqueues the schedule's most recent slot if it is inside the window and was never enqueued, so a deploy or an outage that covers the minute of a daily job no longer costs that day's run.
 

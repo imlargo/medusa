@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/imlargo/medusa/apperr"
+	"github.com/imlargo/medusa/internal/reqid"
 )
 
 const testSecret = "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"
@@ -186,5 +187,19 @@ func TestHMACVerifiesAProvidersOwnScheme(t *testing.T) {
 		if _, err := github.Verify(req); !errors.Is(err, ErrInvalidSignature) {
 			t.Errorf("Verify() with %s = %v, want ErrInvalidSignature", name, err)
 		}
+	}
+}
+
+// A callback sent while handling a request, or a job that request enqueued,
+// carries its ID, so both services' logs can be joined.
+func TestNewRequestCarriesTheRequestID(t *testing.T) {
+	signer, _ := NewSigner(testSecret)
+
+	req, err := signer.NewRequest(reqid.With(t.Context(), "req-1"), "https://api.example.com/hooks", "evt_1", []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := req.Header.Get("X-Request-ID"); got != "req-1" {
+		t.Errorf("X-Request-ID = %q, want req-1", got)
 	}
 }

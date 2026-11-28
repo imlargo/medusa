@@ -194,7 +194,11 @@ func WithJobContext(fn func(ctx context.Context, job *Job) context.Context) Work
 }
 
 // WithOnFinish is called after every run, with how long the handler took and
-// its error. It is where metrics and error reporting hook in.
+// its error. It is where metrics and error reporting hook in: ctx is the
+// handler's, with whatever WithJobContext put in it (the request ID, the
+// caller), and a panic arrives as a *[PanicError]. A job that will be
+// retried is reported on each failed attempt; compare job.Attempt with
+// job.MaxAttempts to report only the last.
 func WithOnFinish(fn func(ctx context.Context, job *Job, took time.Duration, err error)) WorkerOption {
 	return func(w *Worker) { w.onFinish = fn }
 }
@@ -482,13 +486,26 @@ func (w *Worker) run(jobsCtx context.Context, job *Job) {
 	}
 }
 
+// PanicError is the error a handler's panic becomes. The run counts as a
+// failed attempt, and WithOnFinish receives this error with the stack.
+type PanicError struct {
+	// Value is what was passed to panic.
+	Value any
+
+	// Stack is the stack of the goroutine that panicked.
+	Stack []byte
+}
+
+func (e *PanicError) Error() string { return fmt.Sprintf("panic: %v", e.Value) }
+
 // call runs the handler and turns a panic into an error, so one bad job
 // cannot take the worker down.
 func (w *Worker) call(ctx context.Context, fn HandlerFunc, job *Job) (err error) {
 	defer func() {
 		if v := recover(); v != nil {
-			w.logger.ErrorContext(ctx, "queue job panicked", slog.String("kind", job.Kind), slog.Int64("job", job.ID), slog.Any("panic", v), slog.String("stack", string(debug.Stack())))
-			err = fmt.Errorf("panic: %v", v)
+			stack := debug.Stack()
+			w.logger.ErrorContext(ctx, "queue job panicked", slog.String("kind", job.Kind), slog.Int64("job", job.ID), slog.Any("panic", v), slog.String("stack", string(stack)))
+			err = &PanicError{Value: v, Stack: stack}
 		}
 	}()
 	return fn(ctx, job)

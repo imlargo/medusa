@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+	"uuid"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -55,7 +56,14 @@ func NewWorker(ctx context.Context, name string) (*App, error) {
 		// A job runs as the request that enqueued it: its logs carry that
 		// request's ID, and its handler sees that caller.
 		queue.WithJobContext(func(ctx context.Context, job *queue.Job) context.Context {
-			ctx = medusa.WithRequestID(ctx, job.CorrelationID)
+			correlationID := job.CorrelationID
+			if correlationID == "" {
+				// A scheduled job has no request behind it: it starts an ID
+				// of its own, which its logs, the jobs it enqueues and the
+				// calls it makes then share.
+				correlationID = uuid.New().String()
+			}
+			ctx = medusa.WithRequestID(ctx, correlationID)
 			if caller, ok := auth.PrincipalFromMetadata(job.Metadata); ok {
 				ctx = auth.WithPrincipal(ctx, caller)
 			}

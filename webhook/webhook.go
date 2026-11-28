@@ -48,6 +48,7 @@ import (
 	"time"
 
 	"github.com/imlargo/medusa/apperr"
+	"github.com/imlargo/medusa/internal/reqid"
 )
 
 // The headers of a Standard Webhooks message.
@@ -73,6 +74,9 @@ const (
 
 	// minSecretBytes is the shortest secret accepted: the spec's lower bound.
 	minSecretBytes = 24
+
+	// requestIDHeader carries the sender's request ID to the receiver.
+	requestIDHeader = "X-Request-ID"
 )
 
 // ErrInvalidSignature: the message is not signed with a known secret, its
@@ -125,6 +129,8 @@ func (s *Signer) Headers(id string, at time.Time, body []byte) http.Header {
 }
 
 // NewRequest builds the POST that delivers a JSON body to url, signed now.
+// It carries the request ID of ctx, when there is one, so the receiver's
+// logs join the sender's.
 func (s *Signer) NewRequest(ctx context.Context, url, id string, body []byte) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -135,6 +141,9 @@ func (s *Signer) NewRequest(ctx context.Context, url, id string, body []byte) (*
 		req.Header[name] = values
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if id := reqid.From(ctx); id != "" {
+		req.Header.Set(requestIDHeader, id)
+	}
 	return req, nil
 }
 
