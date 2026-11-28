@@ -153,6 +153,13 @@ Response shapes (a nil slice in `data` is always sent as `[]`, never `null`):
 
 The baseline migration (`00001`) matches the table GORM created, so existing databases adopt it without changes. The schema is the single source for both goose and sqlc, so the queries are checked against it at generation time.
 
+## Passwords
+
+- **Stored as argon2id**, with the parameters OWASP recommends, in a string that carries its own parameters and salt.
+- **The policy is length:** 12 to 128 characters, and no rules about which characters. A password it rejects answers `password.too_short` or `password.too_long`.
+- **Older hashes move on their own.** A bcrypt hash, or an argon2id one with weaker parameters, still signs its owner in, and is replaced at that sign-in.
+- **Sign-in takes the same time** for an unknown email as for a wrong password.
+
 ## Sessions
 
 Signing in returns two tokens with different jobs.

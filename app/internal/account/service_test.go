@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/imlargo/medusa/auth"
+	"github.com/imlargo/medusa/auth/password"
 	"github.com/imlargo/medusa/postgres/pgtest"
 	"github.com/imlargo/medusa/postgres/queue"
 
@@ -79,18 +82,58 @@ func TestRegisterTwiceIsEmailTaken(t *testing.T) {
 	if _, err := svc.Register(ctx, "ada@example.com", "correct horse"); err != nil {
 		t.Fatalf("Register() = %v", err)
 	}
-	if _, err := svc.Register(ctx, " ADA@example.com", "other"); !errors.Is(err, user.ErrEmailTaken) {
+	if _, err := svc.Register(ctx, " ADA@example.com", "another passphrase"); !errors.Is(err, user.ErrEmailTaken) {
 		t.Errorf("second Register() = %v, want user.ErrEmailTaken", err)
 	}
 }
 
-// bcrypt cannot hash past 72 bytes. That is the client's input to fix, not a
-// server failure, and it is caught before anything is stored.
-func TestRegisterRejectsAPasswordOver72Bytes(t *testing.T) {
+// The policy is checked before anything is stored: a password it rejects is
+// the client's input to fix, with the rule it broke.
+func TestRegisterAppliesThePasswordPolicy(t *testing.T) {
 	t.Parallel()
 	svc := account.NewService(store.New(nil), user.NewRepository(nil), session.NewRepository(nil), auth.MustNewJWT[int64](strings.Repeat("s", 32)), time.Minute, time.Hour, 0)
 
-	if _, err := svc.Register(t.Context(), "ada@example.com", strings.Repeat("a", 73)); !errors.Is(err, account.ErrPasswordTooLong) {
-		t.Errorf("Register() = %v, want ErrPasswordTooLong", err)
+	if _, err := svc.Register(t.Context(), "ada@example.com", "too short"); !errors.Is(err, password.ErrTooShort) {
+		t.Errorf("Register() with 9 characters = %v, want password.ErrTooShort", err)
+	}
+	if _, err := svc.Register(t.Context(), "ada@example.com", strings.Repeat("a", 129)); !errors.Is(err, password.ErrTooLong) {
+		t.Errorf("Register() with 129 characters = %v, want password.ErrTooLong", err)
+	}
+}
+
+// An account from before argon2id has a bcrypt hash. It still signs in, and
+// signing in is when its hash is replaced.
+func TestLoginUpgradesAnOldHash(t *testing.T) {
+	t.Parallel()
+	pool := pgtest.New(t, migrations.FS)
+	if err := queue.Install(t.Context(), pool); err != nil {
+		t.Fatalf("install the job queue: %v", err)
+	}
+	users := user.NewRepository(pool)
+	svc := account.NewService(store.New(pool), users, session.NewRepository(pool), auth.MustNewJWT[int64](strings.Repeat("s", 32)), time.Minute, time.Hour, 0)
+	ctx := t.Context()
+
+	legacy, err := bcrypt.GenerateFromPassword([]byte("an old password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := users.Create(ctx, "old@example.com", string(legacy))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Login(ctx, "old@example.com", "an old password"); err != nil {
+		t.Fatalf("Login() with a bcrypt hash = %v, want it to sign in", err)
+	}
+
+	stored, err := users.Get(ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(stored.Password, "$argon2id$") {
+		t.Errorf("stored hash = %q, want it replaced with argon2id", stored.Password[:10])
+	}
+	if _, err := svc.Login(ctx, "old@example.com", "an old password"); err != nil {
+		t.Errorf("Login() after the upgrade = %v, want it to sign in", err)
 	}
 }

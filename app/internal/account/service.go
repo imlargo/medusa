@@ -6,12 +6,11 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"sync"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
+	"github.com/imlargo/medusa/apperr"
 	"github.com/imlargo/medusa/auth"
+	"github.com/imlargo/medusa/auth/password"
 
 	"github.com/imlargo/medusa/app/internal/session"
 	"github.com/imlargo/medusa/app/internal/store"
@@ -30,22 +29,12 @@ type Tokens struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// maxPasswordBytes is the most bcrypt hashes; it rejects anything longer.
-const maxPasswordBytes = 72
-
-// dummyHash is compared against when the email is unknown, so a login takes
-// as long for an unknown email as for a wrong password and its timing does
-// not reveal which emails have accounts.
-var dummyHash = sync.OnceValue(func() []byte {
-	hash, _ := bcrypt.GenerateFromPassword([]byte("medusa-dummy-password"), bcrypt.DefaultCost)
-	return hash
-})
-
 // Service registers and signs in accounts.
 type Service struct {
 	store     *store.Store
 	users     *user.Repository
 	sessions  *session.Repository
+	passwords *password.Hasher
 	tokens    *auth.JWT[int64]
 	refresher *auth.Refresher
 	accessTTL time.Duration
@@ -64,6 +53,7 @@ func NewService(store *store.Store, users *user.Repository, sessions *session.Re
 		store:     store,
 		users:     users,
 		sessions:  sessions,
+		passwords: password.New(),
 		tokens:    tokens,
 		refresher: auth.NewRefresher(sessions, refreshTTL, auth.WithReuseGrace(reuseGrace)),
 		accessTTL: accessTTL,
@@ -71,14 +61,15 @@ func NewService(store *store.Store, users *user.Repository, sessions *session.Re
 }
 
 // Register creates an account and signs it in. A taken email is
-// user.ErrEmailTaken, a password over 72 bytes ErrPasswordTooLong.
-func (s *Service) Register(ctx context.Context, email, password string) (*Session, error) {
-	if len(password) > maxPasswordBytes {
-		return nil, ErrPasswordTooLong
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+// user.ErrEmailTaken; a password the policy rejects is password.ErrTooShort
+// or password.ErrTooLong.
+func (s *Service) Register(ctx context.Context, email, plain string) (*Session, error) {
+	hash, err := s.passwords.Hash(ctx, plain)
 	if err != nil {
+		// The policy's own errors go to the client as they are.
+		if _, declared := errors.AsType[*apperr.Error](err); declared {
+			return nil, err
+		}
 		return nil, ErrPasswordHashFailed.WithCause(err)
 	}
 
@@ -89,7 +80,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 	var created *user.User
 	err = s.store.WithTx(ctx, func(ctx context.Context) error {
 		var txErr error
-		if created, txErr = s.users.Create(ctx, email, string(hash)); txErr != nil {
+		if created, txErr = s.users.Create(ctx, email, hash); txErr != nil {
 			return txErr
 		}
 		return s.store.Publish(ctx, EventRegistered, Registered{UserID: created.ID})
@@ -103,18 +94,33 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 
 // Login signs in the account with email and password, or answers
 // ErrInvalidCredentials.
-func (s *Service) Login(ctx context.Context, email, password string) (*Session, error) {
+func (s *Service) Login(ctx context.Context, email, plain string) (*Session, error) {
 	found, err := s.users.GetByEmail(ctx, email)
 	if errors.Is(err, user.ErrNotFound) {
-		_ = bcrypt.CompareHashAndPassword(dummyHash(), []byte(password))
+		// Does the work of a comparison, so the time a sign-in takes does
+		// not reveal which emails have accounts.
+		_, _, _ = s.passwords.Verify(plain, "")
 		return nil, ErrInvalidCredentials
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(found.Password), []byte(password)); err != nil {
+	ok, rehash, err := s.passwords.Verify(plain, found.Password)
+	if err != nil {
+		return nil, ErrPasswordHashFailed.WithCause(err)
+	}
+	if !ok {
 		return nil, ErrInvalidCredentials
+	}
+
+	if rehash {
+		// The stored hash is from an older scheme or weaker parameters, and
+		// this is the one moment the plain password is known. Failing to
+		// upgrade it must not fail the sign-in: it is tried again next time.
+		if upgraded, hashErr := s.passwords.Hash(ctx, plain); hashErr == nil {
+			_ = s.users.SetPassword(ctx, found.ID, upgraded)
+		}
 	}
 
 	return s.sessionFor(ctx, found)

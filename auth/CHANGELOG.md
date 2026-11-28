@@ -4,6 +4,10 @@ All notable changes to `github.com/imlargo/medusa/auth`. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `auth/password`: `Hasher` hashes with argon2id (OWASP's parameters, PHC format) and applies NIST's policy: 12 to 128 characters, no composition rules, and an optional breach check (`WithBreachCheck`). `Verify` also reads bcrypt hashes and says when a hash should be replaced, so an application moves to argon2id one sign-in at a time. With no hash it does the work of a comparison, so sign-in timing does not reveal which accounts exist.
+
 ## [0.2.0] - 2026-11-28
 
 ### Added

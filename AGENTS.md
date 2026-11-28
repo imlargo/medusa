@@ -64,6 +64,7 @@ Batteries:
 | `postgres/flagstore` | Feature flags in a table: `Install`, `New(conn)`, `Load`, `Set`, `Delete`. The loader of the core's `flags` |
 | `postgres/queue` | Jobs on Postgres: `Install`, `New(conn)`, `Enqueue`/`EnqueueTx`, `Worker(logger, queues)`, `Register`, `Schedule` (cron), `Periodic`, `Stats`, `Failed`, `Retry` |
 | `auth` | `Principal` in the context: `Middleware(authenticators...)`, `Enrich`, `Require(scopes...)`, `PrincipalFrom(ctx)`, `SubjectFrom[S](ctx)`; authenticators `NewJWT[S]` (`Sign`, `Parse`, `WithScopes`, `WithTenant`) and `APIKeys(lookup)`; `NewRefresher(store, ttl)` for opaque refresh tokens that rotate (`Issue`, `Rotate`, `Revoke`) over a `RefreshStore` the app implements |
+| `auth/password` | `New()`: `Hash` (argon2id, refuses what the policy rejects), `Verify` (also bcrypt, reports when to rehash), `Check`; errors `password.too_short`, `password.too_long`, `password.breached` |
 | `storage` | S3/R2 object storage: `NewFileStorage`, upload (sized, stream, presigned PUT), download, `Head`, `Copy`, `List`, bulk delete, key validation |
 | `api` | The API contract on Huma: `New`, `Group` (`Secured`, `Tags`), `Get`/`Post`/`Put`/`Patch`/`Delete` for `func(ctx, *In) (*Resource, error)`, `Errors`, `Status`, `Scopes`, `Empty`, `Optional[T]`, `Page`/`List[T]`/`NewList`, `Document`, `Request` |
 | `env` | `LoadDotEnv()`, `New()`: typed getters (`Required`, `Int`, `Duration`, `List`...) that collect every problem into `Err()` |

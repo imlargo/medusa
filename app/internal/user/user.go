@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-// User is an account. Password holds the bcrypt hash and is never serialized.
+// User is an account. Password holds the password's hash and is never
+// serialized.
 type User struct {
 	ID        int64     `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
