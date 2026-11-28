@@ -4,9 +4,9 @@ Where Medusa is going and how the work is run. Status and context live in [conte
 
 The goal: a batteries-included Go framework on Gin whose batteries are opt-in (ADR 0002), so that the code most APIs need is written once, here, and never again in each app. Its model is FastAPI: types are the single source of truth for validation, documentation and errors, and the short way to write something is also the safe one.
 
-## Where it stands (2026-11-27)
+## Where it stands (2026-11-28)
 
-On `main` and released: the core, `env`, `postgres` and `storage` at `v0.1.0`, `auth` at `v0.1.1`.
+On `main` and released: the core `v0.4.0`, `api/v0.1.0`, `auth/v0.3.0`, `env/v0.1.0`, `postgres/v0.4.0`, `storage/v0.2.0`, `tracing/v0.1.0`.
 
 - Medusa separated from the app (ADR 0001); pgx + sqlc + goose instead of GORM.
 - Core: `medusa`, `apperr`, `httperr`, `middleware`, `health`, `httpserver`, `lifecycle`, `job`, `metrics`. The core no longer pulls the AWS SDK or godotenv.
@@ -90,7 +90,7 @@ Each one is an opt-in module (ADR 0002), built with the app as its first consume
 
 | ID | Item | Size | Depends on |
 |---|---|---|---|
-| 2.1 | **`api` battery: typed operations, FastAPI style.** One input struct (path, query, header and body tags) drives binding, validation, OpenAPI 3.1 served at startup, security schemes and the error responses. Built on Huma through its Gin adapter, so Gin stays the router and routes move one at a time; `apperr` renders through Huma's error hook. Replaces swag and `make docs`. Routes answer with the resource itself, without the `{success, message, data}` envelope (decided 2026-11-28). Done as the `api` battery (ADR 0008), unreleased. | L | 1.4 |
+| 2.1 | **`api` battery: typed operations, FastAPI style.** One input struct (path, query, header and body tags) drives binding, validation, OpenAPI 3.1 served at startup, security schemes and the error responses. Built on Huma through its Gin adapter, so Gin stays the router and routes move one at a time; `apperr` renders through Huma's error hook. Replaces swag and `make docs`. Routes answer with the resource itself, without the `{success, message, data}` envelope (decided 2026-11-28). Done as the `api` battery (ADR 0008). | L | 1.4 |
 | 2.2 | **`env`** (named so it does not clash with the app's `config`): env loading with a `.env` fallback, typed getters, one error listing every problem. Extracted from `app/internal/config`. `cmd/migrate` stops needing `JWT_SECRET`. Done. | M | |
 | 2.3 | **Auth battery v1**, split so heavy dependencies stay opt-in. Needs D1, D2, D6. `auth/oidc` is its own module. **Never built:** an authorization server or OIDC provider, SAML, SCIM, our own crypto, or a user admin UI. Apps that need SSO or share one login across apps use an IdP (Zitadel, Ory, Keycloak) and only the verifier. | L | 1.5 |
 | 2.4 | **`queue` battery**: Postgres jobs enqueued in the same transaction as the write that causes them, with leases, retries with backoff, a visible failed state, concurrency per queue, and metrics for depth, age and wait. The app template gains `cmd/worker`. Written here on `SKIP LOCKED` with lease tokens (D7, ADR 0004), not on River. Done as `postgres/queue` with cron schedules, `Failed`/`Retry` and Prometheus metrics (`postgres/v0.2.0`; `metrics.NewJobs` is in the core, unreleased). | L | |

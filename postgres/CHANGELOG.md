@@ -4,6 +4,8 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-28
+
 ### Added
 
 - `WithQueryObserver`: a function called around every statement, with its text and its error. It is how a tracing library joins in without this module importing one.
@@ -46,7 +48,8 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 - `Conn`, `IsNoRows`, `IsUniqueViolation`.
 - `pgtest.New`: a fresh database per test, cloned from a template migrated once.
 
-[Unreleased]: https://github.com/imlargo/medusa/compare/postgres/v0.3.0...HEAD
+[Unreleased]: https://github.com/imlargo/medusa/compare/postgres/v0.4.0...HEAD
+[0.4.0]: https://github.com/imlargo/medusa/releases/tag/postgres/v0.4.0
 [0.3.0]: https://github.com/imlargo/medusa/releases/tag/postgres/v0.3.0
 [0.2.0]: https://github.com/imlargo/medusa/releases/tag/postgres/v0.2.0
 [0.1.0]: https://github.com/imlargo/medusa/releases/tag/postgres/v0.1.0

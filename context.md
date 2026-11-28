@@ -80,7 +80,14 @@ Then, for the same consumer, released on 2026-11-28 as the core `v0.3.0`, `postg
 
 Decided on 2026-11-28: argon2id with a minimum of 12 characters (D2), no response envelope on the `api` battery (D8), OpenTelemetry in an `otel` battery (D9).
 
-Built after those releases, on `main` and not tagged yet: the `api` battery on Huma (ADR 0008) with the example app's routes on it and swag removed, feature flags (`flags`, `postgres/flagstore`), and `auth/password`.
+Then released on 2026-11-28 as `api/v0.1.0`, `tracing/v0.1.0`, the core `v0.4.0`, `postgres/v0.4.0` and `auth/v0.3.0`:
+
+- The `api` battery on Huma (ADR 0008), with the example app's routes on it and swag removed.
+- The `tracing` battery on OpenTelemetry.
+- Feature flags (`flags`, `postgres/flagstore`).
+- `auth/password`: argon2id and the password policy.
+
+Every module is released; nothing waits on `main`. Open: mail, more than one replica, and stored `Idempotency-Key` results.
 
 Decided on 2026-11-27: the queue is written in Medusa on `SKIP LOCKED` (D7), auth v1 ships password and OIDC logins with opaque, rotating refresh tokens (D1, D6), and the API contract is built on Huma (D3).
 

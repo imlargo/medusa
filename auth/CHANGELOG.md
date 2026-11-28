@@ -4,6 +4,8 @@ All notable changes to `github.com/imlargo/medusa/auth`. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-28
+
 ### Added
 
 - `auth/password`: `Hasher` hashes with argon2id (OWASP's parameters, PHC format) and applies NIST's policy: 12 to 128 characters, no composition rules, and an optional breach check (`WithBreachCheck`). `Verify` also reads bcrypt hashes and says when a hash should be replaced, so an application moves to argon2id one sign-in at a time. With no hash it does the work of a comparison, so sign-in timing does not reveal which accounts exist.
@@ -38,7 +40,8 @@ All notable changes to `github.com/imlargo/medusa/auth`. The format follows [Kee
 - `JWT[S]`: HS256 tokens with a typed subject (`int64` or `string`) in the standard `sub` claim and an optional issuer.
 - `Middleware` requires a valid bearer token and answers `auth.invalid_token` otherwise; `SubjectFrom[S]` reads the subject in a handler.
 
-[Unreleased]: https://github.com/imlargo/medusa/compare/auth/v0.2.0...HEAD
+[Unreleased]: https://github.com/imlargo/medusa/compare/auth/v0.3.0...HEAD
+[0.3.0]: https://github.com/imlargo/medusa/releases/tag/auth/v0.3.0
 [0.2.0]: https://github.com/imlargo/medusa/releases/tag/auth/v0.2.0
 [0.1.1]: https://github.com/imlargo/medusa/releases/tag/auth/v0.1.1
 [0.1.0]: https://github.com/imlargo/medusa/releases/tag/auth/v0.1.0
