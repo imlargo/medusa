@@ -87,6 +87,7 @@ func Install(ctx context.Context, conn postgres.Conn) error {
 type Client struct {
 	conn      postgres.Conn
 	correlate func(context.Context) string
+	metadata  func(context.Context) map[string]string
 }
 
 // ClientOption configures a Client.
@@ -99,9 +100,22 @@ func WithCorrelationID(from func(context.Context) string) ClientOption {
 	return func(c *Client) { c.correlate = from }
 }
 
+// WithMetadata sets what a job records about the context it was enqueued
+// from, beyond the correlation ID: usually who caused it (the subject and
+// the tenant of the request), so the handler can run as them. The worker
+// hands it back as [Job.Metadata]. It is stored in plain text with the job:
+// identifiers, never credentials.
+func WithMetadata(from func(context.Context) map[string]string) ClientOption {
+	return func(c *Client) { c.metadata = from }
+}
+
 // New builds a client on conn, the pool.
 func New(conn postgres.Conn, opts ...ClientOption) *Client {
-	c := &Client{conn: conn, correlate: func(context.Context) string { return "" }}
+	c := &Client{
+		conn:      conn,
+		correlate: func(context.Context) string { return "" },
+		metadata:  func(context.Context) map[string]string { return nil },
+	}
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -207,13 +221,22 @@ func (c *Client) EnqueueTx(ctx context.Context, tx postgres.Conn, kind string, p
 		return 0, false, fmt.Errorf("queue: enqueue %s: encode payload: %w", kind, err)
 	}
 
+	metadata := c.metadata(ctx)
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	encodedMetadata, err := json.Marshal(metadata)
+	if err != nil {
+		return 0, false, fmt.Errorf("queue: enqueue %s: encode metadata: %w", kind, err)
+	}
+
 	var id int64
 	err = tx.QueryRow(ctx, `
-		INSERT INTO medusa_jobs (queue, kind, payload, priority, max_attempts, scheduled_for, unique_key, active_key, correlation_id)
-		VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamptz, now() + make_interval(secs => $7::double precision)), $8, $9, $10)
+		INSERT INTO medusa_jobs (queue, kind, payload, priority, max_attempts, scheduled_for, unique_key, active_key, correlation_id, metadata)
+		VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamptz, now() + make_interval(secs => $7::double precision)), $8, $9, $10, $11)
 		ON CONFLICT DO NOTHING
 		RETURNING id`,
-		o.queue, kind, encoded, o.priority, o.maxAttempts, o.at, o.after.Seconds(), o.uniqueKey, o.activeKey, c.correlate(ctx),
+		o.queue, kind, encoded, o.priority, o.maxAttempts, o.at, o.after.Seconds(), o.uniqueKey, o.activeKey, c.correlate(ctx), encodedMetadata,
 	).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, false, nil

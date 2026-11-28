@@ -4,6 +4,20 @@ All notable changes to `github.com/imlargo/medusa/auth`. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `Principal`: who a request acts for (kind, subject, tenant, scopes, method), carried in the request's `context.Context`. `PrincipalFrom(ctx)` and `SubjectFrom[S](ctx)` read it anywhere, and `WithPrincipal` sets it where there is no request.
+- `Authenticator`, and `Middleware(authenticators...)` trying several in order. `*JWT[S]` is one; `APIKeys(lookup)` authenticates one key per client by its hash (`HashAPIKey`).
+- `Enrich`: completes the principal per request with what the application reads then, such as the tenant and its scopes.
+- `Require(scopes...)`: answers 403 `auth.insufficient_scope` without them.
+- `WithScopes` and `WithTenant` for `Sign`; `Claims` has `Scopes` and `Tenant`.
+- `Principal.Metadata` and `PrincipalFromMetadata`, to carry who caused a job into its handler.
+
+### Changed
+
+- **Breaking:** `SubjectFrom` takes a `context.Context` and reads the principal from it. Passing a handler's `*medusa.Context` still works.
+- **Breaking:** a request whose `Authorization` header uses a scheme other than Bearer answers `auth.missing_credentials`, no longer `auth.malformed_credentials`: another authenticator may read that scheme.
+
 ## [0.1.1] - 2026-11-04
 
 ### Fixed

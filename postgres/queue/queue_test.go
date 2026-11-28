@@ -101,7 +101,10 @@ func TestInstallIsIdempotent(t *testing.T) {
 
 func TestAJobRunsWithItsPayload(t *testing.T) {
 	t.Parallel()
-	c, pool := newClient(t, WithCorrelationID(func(context.Context) string { return "req-1" }))
+	c, pool := newClient(t,
+		WithCorrelationID(func(context.Context) string { return "req-1" }),
+		WithMetadata(func(context.Context) map[string]string { return map[string]string{"subject": "7", "tenant": "acme"} }),
+	)
 
 	got := make(chan *Job, 1)
 	var payload atomic.Int64
@@ -124,8 +127,12 @@ func TestAJobRunsWithItsPayload(t *testing.T) {
 	if payload.Load() != 42 {
 		t.Errorf("handler got order %d, want 42", payload.Load())
 	}
-	if job := <-got; job.CorrelationID != "req-1" || job.Attempt != 1 {
+	job := <-got
+	if job.CorrelationID != "req-1" || job.Attempt != 1 {
 		t.Errorf("job = %+v, want the correlation ID req-1 on attempt 1", job)
+	}
+	if job.Metadata["subject"] != "7" || job.Metadata["tenant"] != "acme" {
+		t.Errorf("metadata = %v, want what the client recorded", job.Metadata)
 	}
 }
 

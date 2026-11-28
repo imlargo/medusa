@@ -44,7 +44,9 @@ func TestMiddleware(t *testing.T) {
 	}{
 		{name: "valid token", header: "Bearer " + valid, wantStatus: http.StatusOK, wantBody: "7"},
 		{name: "no header", wantStatus: http.StatusUnauthorized, wantCode: medusa.ErrMissingCredentials.Code()},
-		{name: "wrong scheme", header: "Basic " + valid, wantStatus: http.StatusUnauthorized, wantCode: medusa.ErrMalformedCredentials.Code()},
+		// Another scheme is another authenticator's to read; with none, the
+		// request has no credentials this route accepts.
+		{name: "wrong scheme", header: "Basic " + valid, wantStatus: http.StatusUnauthorized, wantCode: medusa.ErrMissingCredentials.Code()},
 		{name: "invalid token", header: "Bearer nope", wantStatus: http.StatusUnauthorized, wantCode: auth.ErrInvalidToken.Code()},
 	}
 	for _, tt := range tests {

@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS medusa_jobs (
     finished_at    timestamptz
 );
 
+-- Added after the first release: what the enqueuer wants the handler to know
+-- about who caused the job.
+ALTER TABLE medusa_jobs ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}';
+
 -- What a claim reads: the next due job of a queue, best priority first.
 CREATE INDEX IF NOT EXISTS medusa_jobs_claim
     ON medusa_jobs (queue, priority DESC, scheduled_for, id)

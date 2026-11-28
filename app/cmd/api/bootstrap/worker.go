@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/httpserver"
 	"github.com/imlargo/medusa/lifecycle"
 	"github.com/imlargo/medusa/metrics"
@@ -51,9 +52,14 @@ func NewWorker(ctx context.Context, name string) (*App, error) {
 	worker := jobs.Worker(container.Logger,
 		queue.Queues{queue.DefaultQueue: workerConcurrency},
 		queue.WithStopTimeout(cfg.Runtime.ShutdownTimeout),
-		// The job's logs carry the ID of the request that enqueued it.
+		// A job runs as the request that enqueued it: its logs carry that
+		// request's ID, and its handler sees that caller.
 		queue.WithJobContext(func(ctx context.Context, job *queue.Job) context.Context {
-			return medusa.WithRequestID(ctx, job.CorrelationID)
+			ctx = medusa.WithRequestID(ctx, job.CorrelationID)
+			if caller, ok := auth.PrincipalFromMetadata(job.Metadata); ok {
+				ctx = auth.WithPrincipal(ctx, caller)
+			}
+			return ctx
 		}),
 		queue.WithOnFinish(func(_ context.Context, job *queue.Job, took time.Duration, err error) {
 			jobMetrics.ObserveRun(job.Queue, job.Kind, job.Waited, took, err)

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/imlargo/medusa"
+	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/postgres"
 	"github.com/imlargo/medusa/postgres/queue"
 
@@ -30,9 +31,19 @@ func New(conn postgres.Conn) *Store {
 
 	return &Store{
 		conn:  conn,
-		jobs:  queue.New(conn, queue.WithCorrelationID(medusa.RequestIDFrom)),
+		jobs:  queue.New(conn, queue.WithCorrelationID(medusa.RequestIDFrom), queue.WithMetadata(callerMetadata)),
 		Users: user.NewRepository(queries),
 	}
+}
+
+// callerMetadata is what a job remembers about who caused it, so its
+// handler runs as the same subject and tenant (see bootstrap/worker.go).
+func callerMetadata(ctx context.Context) map[string]string {
+	caller, ok := auth.PrincipalFrom(ctx)
+	if !ok {
+		return nil
+	}
+	return caller.Metadata()
 }
 
 // Enqueue adds a job for the worker (see cmd/worker). On the Store that

@@ -1,14 +1,22 @@
-// Package auth is Medusa's authentication battery: HS256 access tokens and
-// the Gin middleware that requires them.
-//
-// The token's subject (the standard "sub" claim) is typed, so an app keyed
-// by int64 IDs never parses strings by hand:
+// Package auth is Medusa's authentication battery: it establishes who sends
+// a request and carries that [Principal] in the context, so every layer sees
+// the caller.
 //
 //	tokens, err := auth.NewJWT[int64](cfg.Secret, auth.WithIssuer("my-api"))
 //	token, err := tokens.Sign(user.ID, time.Now().Add(15*time.Minute))
 //
 //	protected := router.Group("/v1", auth.Middleware(tokens))
+//	admin := protected.Group("/admin", auth.Require("admin"))
+//
+//	// anywhere below, with only a context.Context:
 //	userID, ok := auth.SubjectFrom[int64](ctx)
+//	caller, ok := auth.PrincipalFrom(ctx)
+//
+// A request authenticates with an [Authenticator]: a [JWT] for bearer tokens,
+// [APIKeys] for one key per client, or one of the application's own.
+// [Middleware] tries several in order, so users and services can call the
+// same routes. [Enrich] adds what only the application knows, such as the
+// tenant the request acts in, and [Require] guards a route by scope.
 //
 // It is a separate module, so an app with its own authentication never
 // downloads the JWT library.
@@ -17,7 +25,9 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -31,8 +41,33 @@ type Subject interface {
 // Claims are the validated contents of a token.
 type Claims[S Subject] struct {
 	Subject   S
+	Scopes    []string
+	Tenant    string
 	IssuedAt  time.Time
 	ExpiresAt time.Time
+}
+
+// tokenClaims is the token's payload: the registered claims, plus the scopes
+// as OAuth 2 writes them (one space-separated "scope" string) and the tenant.
+type tokenClaims struct {
+	jwt.RegisteredClaims
+	Scope  string `json:"scope,omitempty"`
+	Tenant string `json:"tenant,omitempty"`
+}
+
+// SignOption adds to one token.
+type SignOption func(*tokenClaims)
+
+// WithScopes puts scopes in the token. Use it for what will not change while
+// the token lives; what can be revoked sooner is better read per request, in
+// [Enrich].
+func WithScopes(scopes ...string) SignOption {
+	return func(c *tokenClaims) { c.Scope = strings.Join(scopes, " ") }
+}
+
+// WithTenant binds the token to one tenant.
+func WithTenant(tenant string) SignOption {
+	return func(c *tokenClaims) { c.Tenant = tenant }
 }
 
 // JWT signs and parses HS256 tokens with a shared secret.
@@ -80,16 +115,21 @@ func MustNewJWT[S Subject](secret string, opts ...Option) *JWT[S] {
 }
 
 // Sign returns a token for subject that expires at expiresAt.
-func (j *JWT[S]) Sign(subject S, expiresAt time.Time) (string, error) {
+func (j *JWT[S]) Sign(subject S, expiresAt time.Time, opts ...SignOption) (string, error) {
 	now := time.Now()
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
+	claims := tokenClaims{RegisteredClaims: jwt.RegisteredClaims{
 		Subject:   formatSubject(subject),
 		Issuer:    j.issuer,
 		ExpiresAt: jwt.NewNumericDate(expiresAt),
 		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now),
-	})
+	}}
+	for _, opt := range opts {
+		opt(&claims)
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	signed, err := token.SignedString(j.secret)
 	if err != nil {
@@ -114,7 +154,7 @@ func (j *JWT[S]) Parse(token string) (*Claims[S], error) {
 		parserOpts = append(parserOpts, jwt.WithIssuer(j.issuer))
 	}
 
-	var registered jwt.RegisteredClaims
+	var registered tokenClaims
 	if _, err := jwt.ParseWithClaims(token, &registered, func(*jwt.Token) (any, error) {
 		return j.secret, nil
 	}, parserOpts...); err != nil {
@@ -128,12 +168,45 @@ func (j *JWT[S]) Parse(token string) (*Claims[S], error) {
 
 	claims := &Claims[S]{
 		Subject:   subject,
+		Scopes:    strings.Fields(registered.Scope),
+		Tenant:    registered.Tenant,
 		ExpiresAt: registered.ExpiresAt.Time,
 	}
 	if registered.IssuedAt != nil {
 		claims.IssuedAt = registered.IssuedAt.Time
 	}
 	return claims, nil
+}
+
+// Authenticate reads an "Authorization: Bearer <token>" header, so a JWT is
+// an [Authenticator]. The principal is a [KindUser] with the token's subject,
+// scopes and tenant. A request without the header is [ErrNoCredentials]; a
+// token that does not validate is [ErrInvalidToken], with the reason as its
+// cause.
+func (j *JWT[S]) Authenticate(r *http.Request) (Principal, error) {
+	header := r.Header.Get("Authorization")
+	if header == "" {
+		return Principal{}, ErrNoCredentials
+	}
+
+	scheme, token, found := strings.Cut(header, " ")
+	if !found || !strings.EqualFold(scheme, "bearer") {
+		// Another scheme (Basic, a custom one) is another authenticator's.
+		return Principal{}, ErrNoCredentials
+	}
+
+	claims, err := j.Parse(strings.TrimSpace(token))
+	if err != nil {
+		return Principal{}, ErrInvalidToken.WithCause(err)
+	}
+
+	return Principal{
+		Kind:    KindUser,
+		Subject: formatSubject(claims.Subject),
+		Tenant:  claims.Tenant,
+		Scopes:  claims.Scopes,
+		Method:  MethodJWT,
+	}, nil
 }
 
 func formatSubject[S Subject](subject S) string {
