@@ -91,17 +91,18 @@ func WriteNoContent(c *gin.Context) {
 // error's apperr.Kind. Any error is accepted; one that is not an
 // *apperr.Error becomes a 500 (see apperr.From).
 //
-// The error's cause is also added to Gin's error list so the access log can
-// record why the request failed. That is the only place it appears: it is
+// An error with a cause, and any error that answers 5xx, is also added to
+// Gin's error list, where the access log and middleware.ReportErrors read
+// why the request failed. That is the only place the cause appears: it is
 // never serialized to the client.
 func WriteError(c *gin.Context, err error) {
 	if err == nil {
 		return
 	}
 
-	if cause := apperr.From(err).Cause(); cause != nil {
-		// Recorded for the access log, not for the response body.
-		_ = c.Error(cause)
+	if appErr := apperr.From(err); appErr.Cause() != nil || httperr.Status(appErr.Kind()) >= http.StatusInternalServerError {
+		// Recorded for the log and for error reporting, not for the response.
+		_ = c.Error(appErr)
 	}
 
 	problem := httperr.NewProblem(err)

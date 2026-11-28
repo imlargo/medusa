@@ -43,7 +43,7 @@ Core:
 | `medusa` (root) | `Context`, `Handle`/`HandleCreate`/`HandleUpdate`/`HandleGet`/`HandleDelete`, response writers, `RequestIDKey`, `RequestIDFrom(ctx)`, `LogHandler`, the request errors (`ErrValidation`, `ErrMissingCredentials`...) |
 | `apperr` | `Error`, `Kind`, declaring constructors (`NotFound`, `Conflict`, `FailedPrecondition`...), `From`, `Declared` (every declared error, for the catalog) |
 | `httperr` | `Status(kind)`, `Problem` (RFC 9457), `NewProblem`, `Write` for plain net/http |
-| `middleware` | `RequestID`, `SecureHeaders`, `Recover`, `Timeout`, `CORS`, `BodyLimit`, `Metrics`, `RateLimit`, `APIKey`, `BearerAPIKey` |
+| `middleware` | `RequestID`, `SecureHeaders`, `ReportErrors`, `Recover`, `Timeout`, `CORS`, `BodyLimit`, `Metrics`, `RateLimit`, `APIKey`, `BearerAPIKey` |
 | `health` | `Service.Register(name, fn)`, `Service.Drain(ctx, delay)`, `Handler.Live`, `Handler.Ready` |
 | `httpserver` | `New(handler, logger, opts...)`: serves any `http.Handler` with graceful shutdown |
 | `job` | `Every(name, interval, fn, opts...)`: periodic background work, run and stopped by `lifecycle` |
@@ -174,12 +174,21 @@ The worker serves `/metrics` and `/health` on `WORKER_PORT`: `jobs_ready`, `jobs
 ### Receive a webhook, or a callback from another service
 
 1. Verify before anything else, on the raw body: `body, id, err := verifier.Verify(ctx.Request)` with a `webhook.Verifier` (Standard Webhooks: Svix, Resend, and Medusa's own `webhook.Signer`), or `webhook.HMAC{Header: ..., Prefix: ..., Secret: ...}.Verify` for a provider that signs the body into one header. Return the error as is: it answers 401 `webhook.invalid_signature`.
-2. Store it before answering, once: enqueue a job with the raw body and `queue.Unique("<provider>:" + id)`. A redelivery finds the key taken and adds nothing.
+2. Store it before answering, once: enqueue a job with the raw body and `queue.Unique("<provider>:" + id)`. A redelivery finds the key taken and adds nothing, for as long as the finished job is kept (`queue.WithRetention`, 7 days by default); a provider that redelivers later than that runs again.
 3. Answer 2xx. The work happens in the job's handler, which is retried from the stored body if it fails.
 
 The route is public and outside `auth.Middleware`: the signature is the credential. Never process a webhook inline in its handler: the provider times out and redelivers, and a failure loses the event.
 
 To send one: `signer.NewRequest(ctx, url, id, body)` and an `httpclient.Client`, from a job, with the same `id` on every retry.
+
+### Report errors to a tracker
+
+Medusa ships no tracker; it gives one function to call per source, each with the error, the request ID and the caller in its context.
+
+- **Requests:** `middleware.ReportErrors(func(c *medusa.Context, err error) { ... })`, before `middleware.Recover`. It is called for every error behind a 5xx response, panics included (`*middleware.PanicError` has the stack), and never for a 4xx.
+- **Jobs:** `queue.WithOnFinish(func(ctx, job, took, err) { ... })`, the same hook that feeds the metrics. A panic is a `*queue.PanicError`. Report when `job.Attempt == job.MaxAttempts` to hear of a job once, when it is given up.
+
+Inside either, `medusa.RequestIDFrom(ctx)` and `auth.PrincipalFrom(ctx)` say which request and whose. One ID follows the work: the request's ID is stored with the jobs it enqueues, set again in their handlers, and sent as `X-Request-ID` by `httpclient` and by `webhook.Signer.NewRequest`, where the next service's `RequestID` middleware adopts it.
 
 ### Add something to Medusa
 

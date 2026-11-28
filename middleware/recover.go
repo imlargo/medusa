@@ -12,6 +12,19 @@ import (
 	"github.com/imlargo/medusa/apperr"
 )
 
+// PanicError is the error a recovered panic becomes: the cause of the
+// server.internal error the request answers with. Error reporting reads the
+// stack from it.
+type PanicError struct {
+	// Value is what was passed to panic.
+	Value any
+
+	// Stack is the stack of the goroutine that panicked.
+	Stack []byte
+}
+
+func (e *PanicError) Error() string { return fmt.Sprintf("panic: %v", e.Value) }
+
 // Recover turns a panic in a later handler into a logged apperr.ErrInternal
 // problem, so the request still gets a response in the API's error format,
 // and middleware placed before it (the access log, metrics) still sees a 500.
@@ -30,9 +43,10 @@ func Recover(logger *slog.Logger) gin.HandlerFunc {
 				panic(v)
 			}
 
+			stack := debug.Stack()
 			logger.LogAttrs(c.Request.Context(), slog.LevelError, "panic recovered",
 				slog.Any("panic", v),
-				slog.String("stack", string(debug.Stack())),
+				slog.String("stack", string(stack)),
 			)
 
 			if c.Writer.Written() {
@@ -40,7 +54,7 @@ func Recover(logger *slog.Logger) gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			medusa.AbortWithError(c, apperr.ErrInternal.WithCause(fmt.Errorf("panic: %v", v)))
+			medusa.AbortWithError(c, apperr.ErrInternal.WithCause(&PanicError{Value: v, Stack: stack}))
 		}()
 
 		c.Next()

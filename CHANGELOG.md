@@ -4,9 +4,15 @@ All notable changes to the Medusa core (`github.com/imlargo/medusa`). Each batte
 
 ## [Unreleased]
 
+### Changed
+
+- `WriteError` records the whole application error (code, message and cause) in Gin's error list, and does so for every 5xx, where it recorded only the cause and only when there was one. The access log's `error` field reads `code: message: cause`.
+- `webhook.Signer.NewRequest` sends the request ID of its context as `X-Request-ID`.
+
 ### Added
 
 - `webhook`: signing and verification of webhooks and callbacks between services, on the Standard Webhooks scheme (`Signer`, `Verifier` with a replay tolerance and several secrets for rotation), and `HMAC` for a provider that signs the body into one header. A refused message is `webhook.invalid_signature`.
+- `middleware.ReportErrors`: a hook called for every error behind a 5xx response, for an error tracker. A recovered panic is a `*middleware.PanicError` carrying its stack.
 - `metrics.NewJobs`: Prometheus metrics for background jobs. `ObserveRun` records how long a job waited and ran and how it ended; the queues' depth, failed count and oldest ready age are read at scrape time through a function, so the package depends on no queue.
 
 ## [0.2.0] - 2026-11-27

@@ -50,7 +50,7 @@ Butter's backend is being designed on Medusa as three deployables: `api` (HTTP, 
 | a | An outbound HTTP client (done) | 2.6 | #25 |
 | b | Service-to-service auth: keys per client, signed callbacks (done) | 2.12 | #26 |
 | b | Inbound webhooks verified and stored before processing (done) | 2.9 | #27 |
-| b | Observability beyond HTTP | 3.3, 3.5 | #28 |
+| b | Observability beyond HTTP (error reporting and the correlation ID done; tracing last) | 3.3, 3.5 | #28 |
 | c | Events through a transactional outbox | 2.13 | #29 |
 | c | More than one replica: `redis`, rate limits, SSE, websockets | 2.5, 4.2, 4.3, 4.5 | #30 |
 | c | Module boundaries at scale | 2.14 | #31 |
@@ -132,7 +132,7 @@ From "a set of packages" to "an app in 30 lines of `main`".
 | 3.2 | **Request-scoped logging**: a slog handler that adds `request_id` (and `trace_id`) to every line logged with the request's context. Done for `request_id` (`medusa.LogHandler`); `trace_id` comes with 3.3 | S | |
 | 3.3 | **`otel` battery**: tracing for Gin, pgx, the queue and `httpclient`; exemplars on the Prometheus metrics. The request ID and the trace travel into jobs and outbound calls. | L | 2.6 |
 | 3.4 | **Admin listener**: pprof, `/metrics` and the probes on a separate port | M | 3.1 |
-| 3.5 | **Error reporting**: panics and `server.internal` errors sent to a tracker (Sentry or any OTLP backend) with the request ID, from requests and from jobs. | S | |
+| 3.5 | **Error reporting**: panics and `server.internal` errors sent to a tracker (Sentry or any OTLP backend) with the request ID, from requests and from jobs. Done as hooks, with no vendor: `middleware.ReportErrors` and `queue.WithOnFinish`. | S | |
 
 ### Phase 4: More than one replica
 

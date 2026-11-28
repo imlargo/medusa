@@ -194,7 +194,7 @@ flowchart LR
 - **A dead worker loses its jobs.** When a lease expires, another worker's reaper puts the job back, or fails it if its attempts are spent. The interrupted run counts as an attempt.
 - **Retries.** A handler's error sends the job back after a growing wait (5 s, 10 s, 20 s... up to 10 minutes). Out of attempts (3 by default), it stays in `medusa_jobs` as `failed` with its `last_error`.
 - **At least once.** A job can run twice, so handlers are safe to repeat.
-- **The request ID follows.** A job keeps the ID of the request that enqueued it, and the worker's logs carry it.
+- **The request ID follows.** A job keeps the ID of the request that enqueued it, and the worker's logs carry it. From there it goes on: `httpclient` and `webhook.Signer` send it as `X-Request-ID`, and the service that receives it adopts it, so one ID joins the logs of a request, its jobs, the calls they make and the callbacks that come back. A scheduled job, which no request caused, starts an ID of its own.
 - **Clock jobs** (`worker.Schedule` with a cron expression in UTC, `worker.Periodic` with an interval) are enqueued by every replica with one key per time slot, so each slot runs once. A schedule with `CatchUp` has the slot a deploy skipped made up when a worker starts.
 - **Metrics.** The worker serves `/metrics` and `/health` on `WORKER_PORT` (8001): depth and oldest age per queue, read at scrape time, and wait and run time per kind.
 - **Failed jobs** are listed with `Failed` and put back with `Retry`.
