@@ -51,6 +51,10 @@ type Job struct {
 	// client was built with WithCorrelationID.
 	CorrelationID string
 
+	// Metadata is what the client's WithMetadata recorded when the job was
+	// enqueued. Empty, never nil, when it recorded nothing.
+	Metadata map[string]string
+
 	// Waited is how long the job was due before a worker claimed it.
 	Waited time.Duration
 

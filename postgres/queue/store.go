@@ -34,7 +34,7 @@ func (c *Client) claim(ctx context.Context, queue string, limit int, owner strin
 		    )
 		    RETURNING *
 		)
-		SELECT id, queue, kind, payload, attempts, max_attempts, correlation_id, lease_token::text, enqueued_at,
+		SELECT id, queue, kind, payload, attempts, max_attempts, correlation_id, metadata, lease_token::text, enqueued_at,
 		       EXTRACT(EPOCH FROM now() - scheduled_for)::double precision
 		FROM claimed
 		ORDER BY priority DESC, scheduled_for, id`,
@@ -50,7 +50,7 @@ func (c *Client) claim(ctx context.Context, queue string, limit int, owner strin
 			job    Job
 			waited float64
 		)
-		if err := rows.Scan(&job.ID, &job.Queue, &job.Kind, &job.Payload, &job.Attempt, &job.MaxAttempts, &job.CorrelationID, &job.leaseToken, &job.EnqueuedAt, &waited); err != nil {
+		if err := rows.Scan(&job.ID, &job.Queue, &job.Kind, &job.Payload, &job.Attempt, &job.MaxAttempts, &job.CorrelationID, &job.Metadata, &job.leaseToken, &job.EnqueuedAt, &waited); err != nil {
 			return nil, fmt.Errorf("claim from %s: %w", queue, err)
 		}
 		job.Waited = time.Duration(waited * float64(time.Second))

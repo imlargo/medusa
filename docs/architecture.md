@@ -95,7 +95,7 @@ Middleware runs in this order:
 | 7 | `middleware.Recover` | all | A panic is logged with its stack and answered as a `server.internal` problem; the access log and metrics above it record a 500 |
 | 8 | `middleware.Timeout` | all but event streams | The request's context gets a `REQUEST_TIMEOUT` deadline; work past it answers 503 `server.timeout` |
 | 9 | `middleware.RateLimit` | `/v1` | 429 over quota; credential endpoints get a tighter rule |
-| 10 | `auth.Middleware` | protected `/v1` routes | Valid bearer token (signature, expiry, issuer) required; stores the user ID |
+| 10 | `auth.Middleware` | protected `/v1` routes | Valid bearer token (signature, expiry, issuer) required; puts the caller, a `Principal`, in the request's context, where handlers, services and the jobs they enqueue read it |
 
 Routes outside `/v1` are deliberately free of auth and rate limiting:
 

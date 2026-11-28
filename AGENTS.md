@@ -1,6 +1,6 @@
 # AGENTS.md
 
-How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md), what comes next in [docs/roadmap.md](docs/roadmap.md), how the system behaves at runtime in [docs/architecture.md](docs/architecture.md), and the reasoning behind the layout in [docs/adr/](docs/adr/) (0001: Medusa apart from the app, 0002: batteries as optional modules, 0003: application errors and business rules, 0004: the job queue on Postgres).
+How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md), what comes next in [docs/roadmap.md](docs/roadmap.md), how the system behaves at runtime in [docs/architecture.md](docs/architecture.md), and the reasoning behind the layout in [docs/adr/](docs/adr/) (0001: Medusa apart from the app, 0002: batteries as optional modules, 0003: application errors and business rules, 0004: the job queue on Postgres, 0005: the caller as a Principal in the context).
 
 ## The mental model
 
@@ -58,7 +58,7 @@ Batteries:
 | `postgres` | `Open(ctx, url, logger, opts...)`, `Migrate(ctx, url, migrations, logger)`, `Conn`, `IsNoRows`, `IsUniqueViolation` |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh database per test, cloned from a template migrated once per set of migrations |
 | `postgres/queue` | Jobs on Postgres: `Install`, `New(conn)`, `Enqueue`/`EnqueueTx`, `Worker(logger, queues)`, `Register`, `Schedule` (cron), `Periodic`, `Stats`, `Failed`, `Retry` |
-| `auth` | `NewJWT[S](secret, WithIssuer(...))`, `Sign`, `Parse`, `Middleware(j)`, `SubjectFrom[S](ctx)` |
+| `auth` | `Principal` in the context: `Middleware(authenticators...)`, `Enrich`, `Require(scopes...)`, `PrincipalFrom(ctx)`, `SubjectFrom[S](ctx)`; authenticators `NewJWT[S]` (`Sign`, `Parse`, `WithScopes`, `WithTenant`) and `APIKeys(lookup)` |
 | `storage` | S3/R2 object storage: `NewFileStorage`, upload (sized, stream, presigned PUT), download, `Head`, `Copy`, `List`, bulk delete, key validation |
 | `env` | `LoadDotEnv()`, `New()`: typed getters (`Required`, `Int`, `Duration`, `List`...) that collect every problem into `Err()` |
 
@@ -105,7 +105,7 @@ Only the files the feature needs exist: `user` has no service or handler, `event
 2. The logic as a method on the feature's `Service`. Business rules return the feature's declared errors (next recipe); any other error becomes a 500.
 3. A handler method with the shape `func(ctx *medusa.Context, in *X) (*Y, error)`, plus swag annotations listing each error code it can return (`@Failure 409 {object} httperr.Problem "user.email_taken"`).
 4. A new service or handler is constructed in `buildServices` / `buildHandlers` in `container.go`.
-5. The route in `routes.go`, wrapped in the adapter for its verb: `medusa.HandleCreate(h.Create)`. Use `g.protected` when it needs a logged-in user, and read the user with `auth.SubjectFrom[int64](ctx)`.
+5. The route in `routes.go`, wrapped in the adapter for its verb: `medusa.HandleCreate(h.Create)`. Use `g.protected` when it needs a logged-in user, and read the user with `auth.SubjectFrom[int64](ctx)`. A service reads the caller the same way from its `context.Context` (`auth.PrincipalFrom(ctx)`); a job's handler sees the caller of the request that enqueued it.
 6. `make docs`.
 
 ### Add a business rule and its error
@@ -214,6 +214,7 @@ Every module (the core and each battery) is versioned and released on its own, w
 - Generated code (`app/internal/database/sqlc`, `app/api/docs`) is regenerated, never edited.
 - Migrations are additive and never run on API startup.
 - Every error a client can see is an `apperr` error declared in an `errors.go`, with a `domain.rule` code. Causes go in `WithCause` and reach the log, never the response.
+- Who may call a route is decided at the route: `auth.Require(scope)` for a scope, `auth.Enrich` for what needs a lookup per request (the tenant, a role). Whether the caller may touch one resource is a business rule in the service, with its declared error.
 - Business code never imports `httperr` or chooses an HTTP status: it picks a `Kind`, and the edge maps it.
 - Logging is `log/slog`, built once in `container.go` and passed down.
 - Register global middleware before any route: Gin does not apply `Use` to routes that already exist.
