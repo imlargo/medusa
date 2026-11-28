@@ -164,7 +164,8 @@ Signing in returns two tokens with different jobs.
 | Used for | Every request to a protected route | `POST /v1/auth/refresh` and `/v1/auth/logout` only |
 
 - **Rotation.** Each refresh returns a new refresh token and retires the one used.
-- **Reuse ends the session.** A retired token presented again was copied, so every token of that sign-in is deleted and both holders sign in again. Two refreshes racing with the same token count as a reuse.
+- **Reuse ends the session.** A retired token presented again was copied, so every token of that sign-in is deleted and both holders sign in again.
+- **Bursts can be allowed.** With `JWT_REFRESH_REUSE_GRACE` (off by default), a token presented again within that window is the client's own burst: each request gets a token, and when one of them is rotated the others are retired. Without it, two refreshes racing with the same token count as a reuse. The window trades detection for convenience: a thief replaying inside it is not told apart.
 - **Logout** deletes the session's tokens. The access token already issued works until it expires, which is why it is short-lived.
 - **Cleanup.** The worker deletes expired refresh tokens daily (`account.purge_sessions`).
 

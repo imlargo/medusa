@@ -12,7 +12,7 @@ All notable changes to `github.com/imlargo/medusa/auth`. The format follows [Kee
 - `Require(scopes...)`: answers 403 `auth.insufficient_scope` without them.
 - `WithScopes` and `WithTenant` for `Sign`; `Claims` has `Scopes` and `Tenant`.
 - `Principal.Metadata` and `PrincipalFromMetadata`, to carry who caused a job into its handler.
-- `Refresher`: opaque refresh tokens stored by their hash, rotated on every use, with the whole session revoked when a used token comes back (RFC 9700). `Issue`, `Rotate`, `Revoke`, over a `RefreshStore` the application implements; a refused token is `auth.invalid_refresh_token`.
+- `Refresher`: opaque refresh tokens stored by their hash, rotated on every use, with the whole session revoked when a used token comes back (RFC 9700). `Issue`, `Rotate`, `Revoke`, over a `RefreshStore` the application implements; a refused token is `auth.invalid_refresh_token`. `WithReuseGrace` serves a token presented again within a window, for clients that refresh from several requests at once.
 
 ### Changed
 

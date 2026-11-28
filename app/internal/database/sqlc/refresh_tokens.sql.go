@@ -13,46 +13,64 @@ import (
 
 const consumeRefreshToken = `-- name: ConsumeRefreshToken :one
 WITH prior AS (
-    SELECT hash, used_at FROM refresh_tokens WHERE refresh_tokens.hash = $1 FOR UPDATE
+    SELECT hash, parent, used_at FROM refresh_tokens WHERE refresh_tokens.hash = $1 FOR UPDATE
+),
+retired AS (
+    UPDATE refresh_tokens s
+    SET used_at = now()
+    FROM prior
+    WHERE prior.used_at IS NULL
+      AND s.parent = prior.parent
+      AND s.hash <> prior.hash
+      AND s.used_at IS NULL
 )
 UPDATE refresh_tokens t
 SET used_at = COALESCE(t.used_at, now())
 FROM prior
 WHERE t.hash = prior.hash
-RETURNING t.hash, t.family, t.user_id, t.expires_at, (prior.used_at IS NOT NULL)::boolean AS reused
+RETURNING t.hash, t.family, t.parent, t.user_id, t.expires_at,
+          (prior.used_at IS NOT NULL)::boolean AS reused,
+          COALESCE(EXTRACT(EPOCH FROM now() - prior.used_at), 0)::double precision AS used_ago_seconds
 `
 
 type ConsumeRefreshTokenRow struct {
-	Hash      string
-	Family    string
-	UserID    int64
-	ExpiresAt pgtype.Timestamptz
-	Reused    bool
+	Hash           string
+	Family         string
+	Parent         pgtype.Text
+	UserID         int64
+	ExpiresAt      pgtype.Timestamptz
+	Reused         bool
+	UsedAgoSeconds float64
 }
 
-// Marks the token as used and says whether it already was, in one statement:
-// the row lock makes two requests with the same token take turns.
+// Marks the token as used and says whether it already was, and how long ago,
+// in one statement: the row lock makes two requests with the same token take
+// turns. On a first use it also retires the token's unused siblings, so only
+// one of the tokens issued for the same parent continues.
 func (q *Queries) ConsumeRefreshToken(ctx context.Context, hash string) (ConsumeRefreshTokenRow, error) {
 	row := q.db.QueryRow(ctx, consumeRefreshToken, hash)
 	var i ConsumeRefreshTokenRow
 	err := row.Scan(
 		&i.Hash,
 		&i.Family,
+		&i.Parent,
 		&i.UserID,
 		&i.ExpiresAt,
 		&i.Reused,
+		&i.UsedAgoSeconds,
 	)
 	return i, err
 }
 
 const createRefreshToken = `-- name: CreateRefreshToken :exec
-INSERT INTO refresh_tokens (hash, family, user_id, expires_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO refresh_tokens (hash, family, parent, user_id, expires_at)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateRefreshTokenParams struct {
 	Hash      string
 	Family    string
+	Parent    pgtype.Text
 	UserID    int64
 	ExpiresAt pgtype.Timestamptz
 }
@@ -61,6 +79,7 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 	_, err := q.db.Exec(ctx, createRefreshToken,
 		arg.Hash,
 		arg.Family,
+		arg.Parent,
 		arg.UserID,
 		arg.ExpiresAt,
 	)

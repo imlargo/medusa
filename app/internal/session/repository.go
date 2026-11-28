@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -39,6 +40,7 @@ func (r *Repository) Create(ctx context.Context, token auth.RefreshToken) error 
 	err = r.queries.CreateRefreshToken(ctx, sqlc.CreateRefreshTokenParams{
 		Hash:      token.Hash,
 		Family:    token.Family,
+		Parent:    pgtype.Text{String: token.Parent, Valid: token.Parent != ""},
 		UserID:    userID,
 		ExpiresAt: pgtype.Timestamptz{Time: token.ExpiresAt, Valid: true},
 	})
@@ -48,23 +50,29 @@ func (r *Repository) Create(ctx context.Context, token auth.RefreshToken) error 
 	return nil
 }
 
-// Consume marks the token with hash as used and reports whether it already
-// was. An unknown hash is auth.ErrRefreshTokenNotFound.
-func (r *Repository) Consume(ctx context.Context, hash string) (auth.RefreshToken, bool, error) {
+// Consume marks the token with hash as used, retires its unused siblings,
+// and reports whether it already was used and how long ago, by the
+// database's clock. An unknown hash is auth.ErrRefreshTokenNotFound.
+func (r *Repository) Consume(ctx context.Context, hash string) (auth.ConsumedToken, error) {
 	row, err := r.queries.ConsumeRefreshToken(ctx, hash)
 	if postgres.IsNoRows(err) {
-		return auth.RefreshToken{}, false, auth.ErrRefreshTokenNotFound
+		return auth.ConsumedToken{}, auth.ErrRefreshTokenNotFound
 	}
 	if err != nil {
-		return auth.RefreshToken{}, false, fmt.Errorf("consume refresh token: %w", err)
+		return auth.ConsumedToken{}, fmt.Errorf("consume refresh token: %w", err)
 	}
 
-	return auth.RefreshToken{
-		Hash:      row.Hash,
-		Family:    row.Family,
-		Subject:   strconv.FormatInt(row.UserID, 10),
-		ExpiresAt: row.ExpiresAt.Time,
-	}, row.Reused, nil
+	return auth.ConsumedToken{
+		RefreshToken: auth.RefreshToken{
+			Hash:      row.Hash,
+			Family:    row.Family,
+			Parent:    row.Parent.String,
+			Subject:   strconv.FormatInt(row.UserID, 10),
+			ExpiresAt: row.ExpiresAt.Time,
+		},
+		Reused:  row.Reused,
+		UsedAgo: time.Duration(row.UsedAgoSeconds * float64(time.Second)),
+	}, nil
 }
 
 // RevokeFamily removes every token of family.

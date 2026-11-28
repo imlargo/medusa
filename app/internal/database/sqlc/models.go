@@ -15,6 +15,7 @@ type RefreshToken struct {
 	ExpiresAt pgtype.Timestamptz
 	UsedAt    pgtype.Timestamptz
 	CreatedAt pgtype.Timestamptz
+	Parent    pgtype.Text
 }
 
 type User struct {
