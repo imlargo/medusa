@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/imlargo/medusa/postgres"
+	"github.com/imlargo/medusa/postgres/queue"
 
 	"github.com/imlargo/medusa/app/internal/config"
 	"github.com/imlargo/medusa/app/internal/database/migrations"
@@ -36,5 +37,16 @@ func run() error {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 
-	return postgres.Migrate(ctx, db.URL, migrations.FS, logger)
+	if err := postgres.Migrate(ctx, db.URL, migrations.FS, logger); err != nil {
+		return err
+	}
+
+	// The job queue keeps its own table up to date, next to the app's schema.
+	pool, err := postgres.Open(ctx, db.URL, logger)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	return queue.Install(ctx, pool)
 }

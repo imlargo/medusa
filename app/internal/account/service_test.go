@@ -8,18 +8,22 @@ import (
 
 	"github.com/imlargo/medusa/auth"
 	"github.com/imlargo/medusa/postgres/pgtest"
+	"github.com/imlargo/medusa/postgres/queue"
 
 	"github.com/imlargo/medusa/app/internal/account"
 	"github.com/imlargo/medusa/app/internal/database/migrations"
-	"github.com/imlargo/medusa/app/internal/database/sqlc"
+	"github.com/imlargo/medusa/app/internal/store"
 	"github.com/imlargo/medusa/app/internal/user"
 )
 
 func newService(t *testing.T) (*account.Service, *auth.JWT[int64]) {
 	t.Helper()
 	tokens := auth.MustNewJWT[int64](strings.Repeat("s", 32))
-	users := user.NewRepository(sqlc.New(pgtest.New(t, migrations.FS)))
-	return account.NewService(users, tokens, time.Minute, time.Hour), tokens
+	pool := pgtest.New(t, migrations.FS)
+	if err := queue.Install(t.Context(), pool); err != nil {
+		t.Fatalf("install the job queue: %v", err)
+	}
+	return account.NewService(store.New(pool), tokens, time.Minute, time.Hour), tokens
 }
 
 func TestRegisterThenLogin(t *testing.T) {

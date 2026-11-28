@@ -1,6 +1,6 @@
 # AGENTS.md
 
-How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md), what comes next in [docs/roadmap.md](docs/roadmap.md), how the system behaves at runtime in [docs/architecture.md](docs/architecture.md), and the reasoning behind the layout in [docs/adr/](docs/adr/) (0001: Medusa apart from the app, 0002: batteries as optional modules, 0003: application errors and business rules).
+How to work in this repository. Read it before changing anything. Product context and status live in [context.md](context.md), what comes next in [docs/roadmap.md](docs/roadmap.md), how the system behaves at runtime in [docs/architecture.md](docs/architecture.md), and the reasoning behind the layout in [docs/adr/](docs/adr/) (0001: Medusa apart from the app, 0002: batteries as optional modules, 0003: application errors and business rules, 0004: the job queue on Postgres).
 
 ## The mental model
 
@@ -57,6 +57,7 @@ Batteries:
 |---|---|
 | `postgres` | `Open(ctx, url, logger, opts...)`, `Migrate(ctx, url, migrations, logger)`, `Conn`, `IsNoRows`, `IsUniqueViolation` |
 | `postgres/pgtest` | `New(t, migrations)`: a fresh database per test, cloned from a template migrated once per set of migrations |
+| `postgres/queue` | Jobs on Postgres: `Install`, `New(conn)`, `Enqueue`/`EnqueueTx`, `Worker(logger, queues)`, `Register`, `Periodic`, `Stats` |
 | `auth` | `NewJWT[S](secret, WithIssuer(...))`, `Sign`, `Parse`, `Middleware(j)`, `SubjectFrom[S](ctx)` |
 | `storage` | S3/R2 object storage: `NewFileStorage`, upload (sized, stream, presigned PUT), download, `Head`, `Copy`, `List`, bulk delete, key validation |
 | `env` | `LoadDotEnv()`, `New()`: typed getters (`Required`, `Int`, `Duration`, `List`...) that collect every problem into `Err()` |
@@ -67,7 +68,8 @@ Batteries:
 app/
   cmd/api/main.go               entry point, calls bootstrap
   cmd/api/bootstrap/            wiring: container.go (dependencies), routes.go (every route), app.go
-  cmd/migrate/                  applies migrations, run as its own deploy step
+  cmd/migrate/                  applies migrations and installs the job queue, run as its own deploy step
+  cmd/worker/                   runs queued jobs; wired in bootstrap/worker.go
   internal/config/              loads and validates env vars
   internal/database/
     migrations/                 goose migrations (the schema), embedded as migrations.FS
@@ -147,11 +149,23 @@ Returning an error, or panicking, rolls everything back. A `WithTx` inside anoth
 
 ### Add a background job
 
-1. The work as a method `func(ctx context.Context) error` on a service. It must return when `ctx` is canceled.
-2. In `bootstrap/app.go`, register it with the lifecycle next to the HTTP server:
-   `lifecycle.WithServer(server, job.Every("expire-sessions", time.Minute, container.Services.Sessions.Expire, job.WithLogger(container.Logger)))` (names are an example).
+Work caused by a request (send the receipt, process the upload) or by the clock (every hour) is a job on the queue. It survives a crash, is retried, and runs on one worker however many replicas there are (ADR 0004).
 
-`lifecycle` then starts it, and on shutdown cancels it and waits for the run in progress. Never start a goroutine with `go` for long-lived work: nobody stops it, and a panic in it kills the process. With several replicas every replica runs the job; work that must run once per cluster needs a lock or a queue.
+1. In the feature, a file `jobs.go`: the kind as a constant (`const KindWelcome = "account.welcome"`, `<feature>.<job>`), its payload as a struct, and the handler `func(ctx context.Context, payload T) error`. The handler has to be safe to run again: a job can run more than once.
+2. Enqueue it where the cause is written, inside the same transaction:
+   ```go
+   err := s.store.WithTx(ctx, func(tx *store.Store) error {
+       // ...the write...
+       return tx.Enqueue(ctx, KindWelcome, WelcomeJob{UserID: id})
+   })
+   ```
+   Options: `queue.In("mail")` for another queue, `queue.After(time.Hour)`, `queue.MaxAttempts(1)` for work that must never repeat, `queue.Unique(key)` to enqueue an event once.
+3. Register the handler in `registerJobs` in `bootstrap/worker.go`: `queue.Register(worker, account.KindWelcome, ...)`. For the clock, also `worker.Periodic(kind, time.Hour, payload)`: it runs once per cluster.
+4. A test that runs the write and finds the job in `medusa_jobs`, after `queue.Install(ctx, pool)` on the test database (see `flow_test.go`).
+
+A handler returns an error to be retried later, and `queue.Permanent(err)` when no retry can help. A job out of attempts stays in `medusa_jobs` with `status = 'failed'` and its `last_error`.
+
+`job.Every` is only for work that belongs to one process, such as refreshing a cache it holds: every replica runs it, and nothing survives a crash. Never start a goroutine with `go` for long-lived work: nobody stops it, and a panic in it kills the process.
 
 ### Add something to Medusa
 
@@ -184,7 +198,8 @@ Every module (the core and each battery) is versioned and released on its own, w
 | root | `go vet ./... ./auth/... ./env/... ./postgres/... ./storage/... ./app/...` | Vets every module |
 | `app/` | `TEST_DATABASE_URL=postgres://... go test ./...` | Also runs the database tests (skipped without the URL) |
 | `app/` | `make run` / `make dev` | Runs the API / with hot reload |
-| `app/` | `make migrate` | Applies pending migrations |
+| `app/` | `make worker` | Runs the worker that executes queued jobs |
+| `app/` | `make migrate` | Applies pending migrations and installs the job queue's table |
 | `app/` | `make sqlc` | Regenerates `internal/database/sqlc` (Docker) |
 | `app/` | `make docs` | Regenerates `api/docs` (Docker) |
 | root | `docker build -f app/Dockerfile .` | Builds the API image |
@@ -206,4 +221,5 @@ Every module (the core and each battery) is versioned and released on its own, w
 - Features depend on each other in one direction (`account` imports `user`). When two features need each other, the shared part is a third feature. Writes across features go through `store.WithTx`.
 - Calls to other services go through `httpclient`, one client per service, never `http.DefaultClient`: it has no timeout. A dependency's rejection (`*httpclient.StatusError`) is handled where it is made or it becomes a 500; never forward a dependency's status or body to a client.
 - Every goroutine has an owner that stops and waits for it: a `job`, a `lifecycle.Server`, or a function that waits before returning.
+- A job is enqueued in the transaction of the write that causes it (`tx.Enqueue`), never after the commit: a crash in between would lose it. Handlers are safe to run twice.
 - Split a package by feature before it reaches about 50 files.

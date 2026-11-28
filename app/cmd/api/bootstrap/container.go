@@ -311,7 +311,7 @@ func (c *Container) buildHealthService() *health.Service {
 
 func (c *Container) buildServices() *Services {
 	return &Services{
-		Account: account.NewService(c.Store.Users, c.JWT, c.Config.Auth.TokenExpiration, c.Config.Auth.RefreshExpiration),
+		Account: account.NewService(c.Store, c.JWT, c.Config.Auth.TokenExpiration, c.Config.Auth.RefreshExpiration),
 	}
 }
 

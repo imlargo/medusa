@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/imlargo/medusa/postgres/pgtest"
+	"github.com/imlargo/medusa/postgres/queue"
 
 	"github.com/imlargo/medusa/app/internal/account"
 	"github.com/imlargo/medusa/app/internal/database/migrations"
-	"github.com/imlargo/medusa/app/internal/database/sqlc"
+	"github.com/imlargo/medusa/app/internal/store"
 	"github.com/imlargo/medusa/app/internal/user"
 )
 
@@ -21,9 +22,12 @@ import (
 // contract on the way.
 func TestAccountFlow(t *testing.T) {
 	pool := pgtest.New(t, migrations.FS)
+	if err := queue.Install(t.Context(), pool); err != nil {
+		t.Fatalf("install the job queue: %v", err)
+	}
 
 	router := newRouter(newTestContainer(t, func(c *Container) {
-		service := account.NewService(user.NewRepository(sqlc.New(pool)), c.JWT, time.Minute, time.Hour)
+		service := account.NewService(store.New(pool), c.JWT, time.Minute, time.Hour)
 		c.Handlers.Account = account.NewHandler(service)
 	}))
 
@@ -56,6 +60,16 @@ func TestAccountFlow(t *testing.T) {
 	status, body = send(http.MethodPost, "/v1/auth/register", `{"email":"ada@example.com","password":"another one"}`, "")
 	if status != http.StatusConflict || body["code"] != user.ErrEmailTaken.Code() {
 		t.Errorf("register again = %d %v, want 409 %s", status, body, user.ErrEmailTaken.Code())
+	}
+
+	// One account, one welcome job: the rejected registration rolled its own
+	// back with the insert it belonged to.
+	var welcomes int
+	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM medusa_jobs WHERE kind = $1", account.KindWelcome).Scan(&welcomes); err != nil {
+		t.Fatalf("count welcome jobs: %v", err)
+	}
+	if welcomes != 1 {
+		t.Errorf("welcome jobs = %d, want 1", welcomes)
 	}
 
 	status, body = send(http.MethodPost, "/v1/auth/login", `{"email":"ada@example.com","password":"wrong"}`, "")

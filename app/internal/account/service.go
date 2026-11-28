@@ -12,6 +12,7 @@ import (
 
 	"github.com/imlargo/medusa/auth"
 
+	"github.com/imlargo/medusa/app/internal/store"
 	"github.com/imlargo/medusa/app/internal/user"
 )
 
@@ -40,7 +41,7 @@ var dummyHash = sync.OnceValue(func() []byte {
 
 // Service registers and signs in accounts.
 type Service struct {
-	users      *user.Repository
+	store      *store.Store
 	tokens     *auth.JWT[int64]
 	accessTTL  time.Duration
 	refreshTTL time.Duration
@@ -48,8 +49,8 @@ type Service struct {
 
 // NewService signs sessions with tokens; access and refresh tokens expire
 // after accessTTL and refreshTTL.
-func NewService(users *user.Repository, tokens *auth.JWT[int64], accessTTL, refreshTTL time.Duration) *Service {
-	return &Service{users: users, tokens: tokens, accessTTL: accessTTL, refreshTTL: refreshTTL}
+func NewService(store *store.Store, tokens *auth.JWT[int64], accessTTL, refreshTTL time.Duration) *Service {
+	return &Service{store: store, tokens: tokens, accessTTL: accessTTL, refreshTTL: refreshTTL}
 }
 
 // Register creates an account and signs it in. A taken email is
@@ -65,8 +66,16 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 	}
 
 	// The unique email constraint decides, so two concurrent registrations of
-	// the same email cannot both succeed.
-	created, err := s.users.Create(ctx, email, string(hash))
+	// the same email cannot both succeed. The welcome job is part of the same
+	// transaction: no account without its job, no job without its account.
+	var created *user.User
+	err = s.store.WithTx(ctx, func(tx *store.Store) error {
+		var txErr error
+		if created, txErr = tx.Users.Create(ctx, email, string(hash)); txErr != nil {
+			return txErr
+		}
+		return tx.Enqueue(ctx, KindWelcome, WelcomeJob{UserID: created.ID})
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +86,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 // Login signs in the account with email and password, or answers
 // ErrInvalidCredentials.
 func (s *Service) Login(ctx context.Context, email, password string) (*Session, error) {
-	found, err := s.users.GetByEmail(ctx, email)
+	found, err := s.store.Users.GetByEmail(ctx, email)
 	if errors.Is(err, user.ErrNotFound) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash(), []byte(password))
 		return nil, ErrInvalidCredentials
@@ -95,7 +104,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*Session, 
 
 // Me returns the signed-in account. A deleted account is user.ErrNotFound.
 func (s *Service) Me(ctx context.Context, userID int64) (*user.User, error) {
-	return s.users.Get(ctx, userID)
+	return s.store.Users.Get(ctx, userID)
 }
 
 func (s *Service) sessionFor(u *user.User) (*Session, error) {

@@ -4,6 +4,15 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ## [Unreleased]
 
+### Added
+
+- `postgres/queue`: a job queue on `FOR UPDATE SKIP LOCKED`.
+  - `Install` creates and upgrades its table, `medusa_jobs`.
+  - `EnqueueTx` adds a job inside the caller's transaction, with a queue, a priority, a delay, a number of attempts and unique keys.
+  - `Worker` claims jobs under a lease with a fencing token, renews it, retries failures with backoff, recovers jobs whose worker died, and on shutdown hands running jobs back without spending an attempt.
+  - `Periodic` runs a job once per interval across every replica.
+  - `Stats` reports depth, running, failed and the age of the oldest ready job per queue.
+
 ## [0.1.0] - 2026-11-04
 
 ### Added
