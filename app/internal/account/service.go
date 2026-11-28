@@ -13,6 +13,7 @@ import (
 
 	"github.com/imlargo/medusa/auth"
 
+	"github.com/imlargo/medusa/app/internal/session"
 	"github.com/imlargo/medusa/app/internal/store"
 	"github.com/imlargo/medusa/app/internal/user"
 )
@@ -43,6 +44,8 @@ var dummyHash = sync.OnceValue(func() []byte {
 // Service registers and signs in accounts.
 type Service struct {
 	store     *store.Store
+	users     *user.Repository
+	sessions  *session.Repository
 	tokens    *auth.JWT[int64]
 	refresher *auth.Refresher
 	accessTTL time.Duration
@@ -56,11 +59,13 @@ type Service struct {
 // reuseGrace is how long after its first use a refresh token is still
 // accepted, for clients that refresh from several requests at once. Zero
 // treats every second use as a stolen token.
-func NewService(store *store.Store, tokens *auth.JWT[int64], accessTTL, refreshTTL, reuseGrace time.Duration) *Service {
+func NewService(store *store.Store, users *user.Repository, sessions *session.Repository, tokens *auth.JWT[int64], accessTTL, refreshTTL, reuseGrace time.Duration) *Service {
 	return &Service{
 		store:     store,
+		users:     users,
+		sessions:  sessions,
 		tokens:    tokens,
-		refresher: auth.NewRefresher(store.Sessions, refreshTTL, auth.WithReuseGrace(reuseGrace)),
+		refresher: auth.NewRefresher(sessions, refreshTTL, auth.WithReuseGrace(reuseGrace)),
 		accessTTL: accessTTL,
 	}
 }
@@ -82,12 +87,12 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 	// transaction: whoever reacts to a new account hears of every one that
 	// exists and of none that does not.
 	var created *user.User
-	err = s.store.WithTx(ctx, func(tx *store.Store) error {
+	err = s.store.WithTx(ctx, func(ctx context.Context) error {
 		var txErr error
-		if created, txErr = tx.Users.Create(ctx, email, string(hash)); txErr != nil {
+		if created, txErr = s.users.Create(ctx, email, string(hash)); txErr != nil {
 			return txErr
 		}
-		return tx.Publish(ctx, EventRegistered, Registered{UserID: created.ID})
+		return s.store.Publish(ctx, EventRegistered, Registered{UserID: created.ID})
 	})
 	if err != nil {
 		return nil, err
@@ -99,7 +104,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (*Sessio
 // Login signs in the account with email and password, or answers
 // ErrInvalidCredentials.
 func (s *Service) Login(ctx context.Context, email, password string) (*Session, error) {
-	found, err := s.store.Users.GetByEmail(ctx, email)
+	found, err := s.users.GetByEmail(ctx, email)
 	if errors.Is(err, user.ErrNotFound) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash(), []byte(password))
 		return nil, ErrInvalidCredentials
@@ -145,13 +150,13 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 
 // PurgeExpiredSessions deletes refresh tokens whose time has passed.
 func (s *Service) PurgeExpiredSessions(ctx context.Context) error {
-	_, err := s.store.Sessions.DeleteExpired(ctx)
+	_, err := s.sessions.DeleteExpired(ctx)
 	return err
 }
 
 // Me returns the signed-in account. A deleted account is user.ErrNotFound.
 func (s *Service) Me(ctx context.Context, userID int64) (*user.User, error) {
-	return s.store.Users.Get(ctx, userID)
+	return s.users.Get(ctx, userID)
 }
 
 func (s *Service) sessionFor(ctx context.Context, u *user.User) (*Session, error) {

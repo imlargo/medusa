@@ -1,10 +1,29 @@
 version: "2"
+
+# One block per feature that owns tables. A feature's queries are generated
+# into its own internal/db package, which Go lets nobody else import.
+#
+# schema lists the feature's own migrations first, then those of the features
+# whose tables it reads or references. Listing another feature's schema
+# grants reading its tables, never writing them: TestTableOwnership enforces
+# that.
 sql:
   - engine: postgresql
-    schema: internal/database/migrations
-    queries: internal/database/queries
+    schema: internal/user/migrations
+    queries: internal/user/queries
+    gen:
+      go: &go
+        package: db
+        out: internal/user/internal/db
+        sql_package: pgx/v5
+        omit_unused_structs: true
+
+  - engine: postgresql
+    schema:
+      - internal/session/migrations
+      - internal/user/migrations # refresh_tokens.user_id references users
+    queries: internal/session/queries
     gen:
       go:
-        package: sqlc
-        out: internal/database/sqlc
-        sql_package: pgx/v5
+        <<: *go
+        out: internal/session/internal/db

@@ -8,8 +8,8 @@ An HTTP API built on [Medusa](../README.md): email and password accounts with JW
 |---|---|
 | HTTP | Gin, through Medusa's handler adapters and middleware |
 | Database | Postgres via pgx v5 (`pgxpool`) |
-| Queries | sqlc, generated from `internal/database/queries` into `internal/database/sqlc` |
-| Migrations | goose, versioned SQL in `internal/database/migrations`, embedded in the binary |
+| Queries | sqlc, generated from each feature's `queries/` into its own `internal/db` |
+| Migrations | goose, versioned SQL in each feature's `migrations/`, merged into one history and embedded in the binary |
 | Logging | `log/slog`, JSON on stderr |
 | Events | `github.com/imlargo/sse` |
 | Rate limiting | `github.com/imlargo/ratelimit` |
@@ -55,7 +55,7 @@ Generated code is committed and never edited by hand.
 
 | Command | Regenerates | From |
 |---|---|---|
-| `make sqlc` | `internal/database/sqlc` | migrations and `internal/database/queries/*.sql` |
+| `make sqlc` | each feature's `internal/db` | that feature's `migrations/` and `queries/` (`sqlc.yaml`) |
 | `make docs` | `api/docs` | the swag annotations on the handlers |
 
 Both run pinned images (`sqlc/sqlc:1.30.0`, `ghcr.io/swaggo/swag:v1.16.6`) and need Docker.

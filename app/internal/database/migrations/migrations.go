@@ -1,11 +1,19 @@
-// Package migrations holds the goose migrations: the schema, versioned. They
-// are also the schema sqlc generates the queries from, so the two cannot
-// drift.
+// Package migrations is the database's one migration history, assembled
+// from the migrations each feature owns. goose applies them in the order of
+// the version their file names start with, whichever feature they live in.
+//
+// A feature that gains its first table is added here.
 package migrations
 
-import "embed"
+import (
+	"github.com/imlargo/medusa/postgres"
 
-// FS holds every migration, embedded in the binaries that apply them.
-//
-//go:embed *.sql
-var FS embed.FS
+	"github.com/imlargo/medusa/app/internal/session"
+	"github.com/imlargo/medusa/app/internal/user"
+)
+
+// FS holds every migration of every feature.
+var FS = postgres.MustMergeMigrations(
+	user.Migrations,
+	session.Migrations,
+)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/imlargo/medusa/app/internal/account"
 	"github.com/imlargo/medusa/app/internal/database/migrations"
+	"github.com/imlargo/medusa/app/internal/session"
 	"github.com/imlargo/medusa/app/internal/store"
 	"github.com/imlargo/medusa/app/internal/user"
 )
@@ -29,7 +30,7 @@ func TestAccountFlow(t *testing.T) {
 
 	router := newRouter(newTestContainer(t, func(c *Container) {
 		// No reuse grace: a second use of a refresh token is a stolen one.
-		service := account.NewService(store.New(pool), c.JWT, time.Minute, time.Hour, 0)
+		service := account.NewService(store.New(pool), user.NewRepository(pool), session.NewRepository(pool), c.JWT, time.Minute, time.Hour, 0)
 		c.Handlers.Account = account.NewHandler(service)
 	}))
 

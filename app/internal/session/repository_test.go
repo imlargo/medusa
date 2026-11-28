@@ -10,20 +10,19 @@ import (
 	"github.com/imlargo/medusa/postgres/pgtest"
 
 	"github.com/imlargo/medusa/app/internal/database/migrations"
-	"github.com/imlargo/medusa/app/internal/database/sqlc"
 	"github.com/imlargo/medusa/app/internal/session"
 	"github.com/imlargo/medusa/app/internal/user"
 )
 
 func newRepository(t *testing.T) (*session.Repository, string) {
 	t.Helper()
-	queries := sqlc.New(pgtest.New(t, migrations.FS))
+	pool := pgtest.New(t, migrations.FS)
 
-	owner, err := user.NewRepository(queries).Create(t.Context(), "ada@example.com", "hash")
+	owner, err := user.NewRepository(pool).Create(t.Context(), "ada@example.com", "hash")
 	if err != nil {
 		t.Fatalf("create the token's user: %v", err)
 	}
-	return session.NewRepository(queries), strconv.FormatInt(owner.ID, 10)
+	return session.NewRepository(pool), strconv.FormatInt(owner.ID, 10)
 }
 
 // The contract auth.Refresher relies on: the second use of a token is told
