@@ -4,6 +4,10 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ## [Unreleased]
 
+### Fixed
+
+- `queue.Worker.Stop` waited for the running jobs while a queue's loop could still start one, a data race on the worker's wait group. It now waits for the loops to exit first.
+
 ### Added
 
 - `queue.WithMetadata` and `Job.Metadata`: what a job records about the context it was enqueued from, such as who caused it, handed back to the handler. `Install` adds the column to an existing table.
