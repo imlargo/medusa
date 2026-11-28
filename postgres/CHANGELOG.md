@@ -4,6 +4,8 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-27
+
 ### Added
 
 - `postgres/queue`: a job queue on `FOR UPDATE SKIP LOCKED`.
@@ -23,5 +25,6 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 - `Conn`, `IsNoRows`, `IsUniqueViolation`.
 - `pgtest.New`: a fresh database per test, cloned from a template migrated once.
 
-[Unreleased]: https://github.com/imlargo/medusa/compare/postgres/v0.1.0...HEAD
+[Unreleased]: https://github.com/imlargo/medusa/compare/postgres/v0.2.0...HEAD
+[0.2.0]: https://github.com/imlargo/medusa/releases/tag/postgres/v0.2.0
 [0.1.0]: https://github.com/imlargo/medusa/releases/tag/postgres/v0.1.0
