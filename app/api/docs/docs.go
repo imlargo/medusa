@@ -86,6 +86,110 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/auth/logout": {
+            "post": {
+                "description": "End the session of a refresh token, on every device that holds a token of it. Signing out twice is not an error.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Sign out",
+                "parameters": [
+                    {
+                        "description": "The refresh token",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_account.RefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Signed out"
+                    },
+                    "400": {
+                        "description": "request.validation_failed",
+                        "schema": {
+                            "$ref": "#/definitions/httperr.Problem"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httperr.Problem"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/auth/refresh": {
+            "post": {
+                "description": "Trade a refresh token for a new access token and a new refresh token. The old refresh token stops working; using it again ends the session.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Refresh the session",
+                "parameters": [
+                    {
+                        "description": "The refresh token",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_account.RefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "New tokens",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/medusa.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/internal_account.Tokens"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "request.validation_failed",
+                        "schema": {
+                            "$ref": "#/definitions/httperr.Problem"
+                        }
+                    },
+                    "401": {
+                        "description": "auth.invalid_refresh_token",
+                        "schema": {
+                            "$ref": "#/definitions/httperr.Problem"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httperr.Problem"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/auth/register": {
             "post": {
                 "description": "Register a new user with email and password",
@@ -275,6 +379,17 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_account.RefreshRequest": {
+            "type": "object",
+            "required": [
+                "refresh_token"
+            ],
+            "properties": {
+                "refresh_token": {
                     "type": "string"
                 }
             }

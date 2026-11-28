@@ -132,6 +132,9 @@ func registerAccountRoutes(g apiGroups, c *Container) {
 	public := g.public.Group("/auth")
 	public.POST("/login", medusa.Handle(c.Handlers.Account.Login))
 	public.POST("/register", medusa.HandleCreate(c.Handlers.Account.Register))
+	// Public on purpose: the refresh token is the credential of both.
+	public.POST("/refresh", medusa.Handle(c.Handlers.Account.Refresh))
+	public.POST("/logout", medusa.Handler(c.Handlers.Account.Logout))
 
 	protected := g.protected.Group("/auth")
 	protected.GET("/user", medusa.HandleGet(c.Handlers.Account.Me))

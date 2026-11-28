@@ -5,8 +5,14 @@ import (
 	"log/slog"
 )
 
-// KindWelcome is the job enqueued for every new account.
-const KindWelcome = "account.welcome"
+// Kinds of job of this feature.
+const (
+	// KindWelcome is enqueued for every new account.
+	KindWelcome = "account.welcome"
+
+	// KindPurgeSessions runs daily and deletes expired refresh tokens.
+	KindPurgeSessions = "account.purge_sessions"
+)
 
 // WelcomeJob is the payload of a KindWelcome job.
 type WelcomeJob struct {
@@ -19,5 +25,12 @@ func Welcome(logger *slog.Logger) func(ctx context.Context, job WelcomeJob) erro
 	return func(ctx context.Context, job WelcomeJob) error {
 		logger.InfoContext(ctx, "account welcomed", slog.Int64("user_id", job.UserID))
 		return nil
+	}
+}
+
+// PurgeSessions handles KindPurgeSessions jobs.
+func PurgeSessions(service *Service) func(ctx context.Context, _ struct{}) error {
+	return func(ctx context.Context, _ struct{}) error {
+		return service.PurgeExpiredSessions(ctx)
 	}
 }

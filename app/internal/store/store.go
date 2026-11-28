@@ -14,14 +14,16 @@ import (
 	"github.com/imlargo/medusa/postgres/queue"
 
 	"github.com/imlargo/medusa/app/internal/database/sqlc"
+	"github.com/imlargo/medusa/app/internal/session"
 	"github.com/imlargo/medusa/app/internal/user"
 )
 
 // Store holds one repository per aggregate.
 type Store struct {
-	conn  postgres.Conn
-	jobs  *queue.Client
-	Users *user.Repository
+	conn     postgres.Conn
+	jobs     *queue.Client
+	Users    *user.Repository
+	Sessions *session.Repository
 }
 
 // New builds the repositories over conn: the *pgxpool.Pool, or a transaction
@@ -30,9 +32,10 @@ func New(conn postgres.Conn) *Store {
 	queries := sqlc.New(conn)
 
 	return &Store{
-		conn:  conn,
-		jobs:  queue.New(conn, queue.WithCorrelationID(medusa.RequestIDFrom), queue.WithMetadata(callerMetadata)),
-		Users: user.NewRepository(queries),
+		conn:     conn,
+		jobs:     queue.New(conn, queue.WithCorrelationID(medusa.RequestIDFrom), queue.WithMetadata(callerMetadata)),
+		Users:    user.NewRepository(queries),
+		Sessions: session.NewRepository(queries),
 	}
 }
 

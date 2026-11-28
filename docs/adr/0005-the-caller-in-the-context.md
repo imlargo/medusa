@@ -38,4 +38,5 @@ Butter's backend, the first consumer, shows what a general answer has to hold. A
 
 - Breaking in `auth`: a request with an `Authorization` scheme other than Bearer now answers `auth.missing_credentials` instead of `auth.malformed_credentials`, since another authenticator may read that scheme.
 - A handler may pass its own `ctx` to `PrincipalFrom` and `SubjectFrom`; they find the request's context inside it.
-- Not built yet: opaque refresh tokens with rotation (D1), password hashing and policy (D2), OIDC logins (D6), signed callbacks between services, and a session authenticator for cookies.
+- Refresh tokens are not tokens a route accepts: they are opaque values kept by the application's store and rotated by `auth.Refresher` (D1), so one can never be used as an access token and a session can be revoked.
+- Not built yet: password hashing and policy (D2), OIDC logins (D6), signed callbacks between services, and a session authenticator for cookies.

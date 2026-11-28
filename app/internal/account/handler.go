@@ -19,6 +19,11 @@ type RegisterRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// RefreshRequest is the body of a token refresh and of a logout.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
 // Handler serves the account endpoints. Each method returns its result and
 // its error; the medusa.Handle adapters bind, validate and render them.
 type Handler struct {
@@ -62,6 +67,47 @@ func (h *Handler) Login(ctx *medusa.Context, in *LoginRequest) (*Session, error)
 //	@Failure		500		{object}	httperr.Problem									"Internal Server Error"
 func (h *Handler) Register(ctx *medusa.Context, in *RegisterRequest) (*Session, error) {
 	return h.service.Register(ctx.Ctx(), in.Email, in.Password)
+}
+
+// Refresh trades a refresh token for new tokens.
+//
+//	@Summary		Refresh the session
+//	@Router			/v1/auth/refresh [post]
+//	@Description	Trade a refresh token for a new access token and a new refresh token. The old refresh token stops working; using it again ends the session.
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			payload	body		account.RefreshRequest							true	"The refresh token"
+//	@Success		200		{object}	medusa.SuccessResponse{data=account.Tokens}	"New tokens"
+//	@Failure		400		{object}	httperr.Problem									"request.validation_failed"
+//	@Failure		401		{object}	httperr.Problem									"auth.invalid_refresh_token"
+//	@Failure		500		{object}	httperr.Problem									"Internal Server Error"
+func (h *Handler) Refresh(ctx *medusa.Context, in *RefreshRequest) (*Tokens, error) {
+	return h.service.Refresh(ctx.Ctx(), in.RefreshToken)
+}
+
+// Logout ends the session a refresh token belongs to.
+//
+//	@Summary		Sign out
+//	@Router			/v1/auth/logout [post]
+//	@Description	End the session of a refresh token, on every device that holds a token of it. Signing out twice is not an error.
+//	@Tags			auth
+//	@Accept			json
+//	@Param			payload	body	account.RefreshRequest	true	"The refresh token"
+//	@Success		204		"Signed out"
+//	@Failure		400		{object}	httperr.Problem	"request.validation_failed"
+//	@Failure		500		{object}	httperr.Problem	"Internal Server Error"
+func (h *Handler) Logout(ctx *medusa.Context) error {
+	var in RefreshRequest
+	if err := ctx.Bind(&in); err != nil {
+		return err
+	}
+	if err := h.service.Logout(ctx.Ctx(), in.RefreshToken); err != nil {
+		return err
+	}
+
+	medusa.WriteNoContent(ctx.Context)
+	return nil
 }
 
 // Me returns the signed-in user.

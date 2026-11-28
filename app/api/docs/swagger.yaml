@@ -46,6 +46,13 @@ definitions:
     - email
     - password
     type: object
+  internal_account.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
   internal_account.RegisterRequest:
     properties:
       email:
@@ -130,6 +137,73 @@ paths:
           schema:
             $ref: '#/definitions/httperr.Problem'
       summary: Login user
+      tags:
+      - auth
+  /v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: End the session of a refresh token, on every device that holds
+        a token of it. Signing out twice is not an error.
+      parameters:
+      - description: The refresh token
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_account.RefreshRequest'
+      responses:
+        "204":
+          description: Signed out
+        "400":
+          description: request.validation_failed
+          schema:
+            $ref: '#/definitions/httperr.Problem'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httperr.Problem'
+      summary: Sign out
+      tags:
+      - auth
+  /v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Trade a refresh token for a new access token and a new refresh
+        token. The old refresh token stops working; using it again ends the session.
+      parameters:
+      - description: The refresh token
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_account.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New tokens
+          schema:
+            allOf:
+            - $ref: '#/definitions/medusa.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_account.Tokens'
+              type: object
+        "400":
+          description: request.validation_failed
+          schema:
+            $ref: '#/definitions/httperr.Problem'
+        "401":
+          description: auth.invalid_refresh_token
+          schema:
+            $ref: '#/definitions/httperr.Problem'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httperr.Problem'
+      summary: Refresh the session
       tags:
       - auth
   /v1/auth/register:
