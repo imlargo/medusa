@@ -21,6 +21,7 @@ WORKDIR /src
 # a go.mod or go.sum. Every module the app replaces with a local path needs
 # its go.mod here.
 COPY go.mod go.sum ./
+COPY api/go.mod api/go.sum ./api/
 COPY auth/go.mod auth/go.sum ./auth/
 COPY env/go.mod env/go.sum ./env/
 COPY postgres/go.mod postgres/go.sum ./postgres/

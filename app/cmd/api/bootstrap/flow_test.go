@@ -21,7 +21,8 @@ import (
 
 // The account flow end to end, through the real router and middleware and a
 // real database: register, sign in, read the signed-in user, and the error
-// contract on the way.
+// contract on the way. A route answers with the resource itself, so the
+// session's fields are at the top of the body.
 func TestAccountFlow(t *testing.T) {
 	pool := pgtest.New(t, migrations.FS)
 	if err := queue.Install(t.Context(), pool); err != nil {
@@ -58,11 +59,6 @@ func TestAccountFlow(t *testing.T) {
 		router.ServeHTTP(rec, req)
 		return rec.Code
 	}
-	data := func(body map[string]any) map[string]any {
-		d, _ := body["data"].(map[string]any)
-		return d
-	}
-
 	status, body := send(http.MethodPost, "/v1/auth/register", `{"email":"Ada@Example.com","password":"correct horse"}`, "")
 	if status != http.StatusCreated {
 		t.Fatalf("register = %d %v, want 201", status, body)
@@ -92,14 +88,14 @@ func TestAccountFlow(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("login = %d %v, want 200", status, body)
 	}
-	tokens, _ := data(body)["tokens"].(map[string]any)
+	tokens, _ := body["tokens"].(map[string]any)
 	access, _ := tokens["access_token"].(string)
 	if access == "" {
 		t.Fatalf("login tokens = %v, want an access token", tokens)
 	}
 
 	status, body = send(http.MethodGet, "/v1/auth/user", "", access)
-	if status != http.StatusOK || data(body)["email"] != "ada@example.com" {
+	if status != http.StatusOK || body["email"] != "ada@example.com" {
 		t.Errorf("me = %d %v, want 200 for ada@example.com", status, body)
 	}
 
@@ -113,8 +109,8 @@ func TestAccountFlow(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("refresh = %d %v, want 200", status, body)
 	}
-	rotated, _ := data(body)["refresh_token"].(string)
-	newAccess, _ := data(body)["access_token"].(string)
+	rotated, _ := body["refresh_token"].(string)
+	newAccess, _ := body["access_token"].(string)
 	if rotated == "" || rotated == refresh {
 		t.Errorf("refresh returned %q, want a new refresh token", rotated)
 	}
@@ -134,7 +130,7 @@ func TestAccountFlow(t *testing.T) {
 
 	// Signing out ends a fresh session, and is safe to repeat.
 	_, body = send(http.MethodPost, "/v1/auth/login", `{"email":"ada@example.com","password":"correct horse"}`, "")
-	tokens, _ = data(body)["tokens"].(map[string]any)
+	tokens, _ = body["tokens"].(map[string]any)
 	refresh, _ = tokens["refresh_token"].(string)
 	for range 2 {
 		if status := sendNoBody(http.MethodPost, "/v1/auth/logout", `{"refresh_token":"`+refresh+`"}`); status != http.StatusNoContent {

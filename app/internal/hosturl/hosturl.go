@@ -100,7 +100,7 @@ func AppURL(host string, port int) string {
 	return Complete(host)
 }
 
-// DocsURL is where Swagger UI is served.
+// DocsURL is where the API documentation is served.
 func DocsURL(host string, port int) string {
-	return AppURL(host, port) + "/docs/index.html"
+	return AppURL(host, port) + "/docs"
 }

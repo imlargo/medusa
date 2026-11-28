@@ -24,7 +24,6 @@ linters:
   exclusions:
     generated: lax
     paths:
-      - app/api/docs
       - app/internal/.*/internal/db
     rules:
       # Tests build requests and files with fixed inputs on purpose.

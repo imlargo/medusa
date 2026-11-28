@@ -1,9 +1,8 @@
-.PHONY: dev run worker migrate test vet build sqlc docs clean
+.PHONY: dev run worker migrate test vet build sqlc clean
 
 # Code generators run from pinned images, so the generated code does not
 # depend on what is installed on the machine that ran them.
 SQLC_IMAGE := sqlc/sqlc:1.30.0
-SWAG_IMAGE := ghcr.io/swaggo/swag:v1.16.6
 DOCKER_RUN := docker run --rm -u "$$(id -u):$$(id -g)"
 
 dev:
@@ -34,11 +33,6 @@ build:
 # Regenerates every feature's internal/db from its migrations and queries.
 sqlc:
 	$(DOCKER_RUN) -v "$(CURDIR):/src" -w /src $(SQLC_IMAGE) generate
-
-# Regenerates api/docs from the handler annotations. The repo root is mounted
-# because the response types live in the Medusa module one level up.
-docs:
-	$(DOCKER_RUN) -v "$(CURDIR)/..:/src" -w /src/app $(SWAG_IMAGE) init -g cmd/api/main.go --parseDependency --parseInternal -o api/docs
 
 clean:
 	rm -rf ./bin ./tmp coverage.out coverage.html

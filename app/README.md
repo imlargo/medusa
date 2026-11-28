@@ -13,7 +13,7 @@ An HTTP API built on [Medusa](../README.md): email and password accounts with JW
 | Logging | `log/slog`, JSON on stderr |
 | Events | `github.com/imlargo/sse` |
 | Rate limiting | `github.com/imlargo/ratelimit` |
-| API docs | swag, generated into `api/docs`, served at `/docs` outside production |
+| API contract | Medusa's `api` battery on Huma: typed routes, OpenAPI 3.1 built at startup, served at `/docs` outside production |
 
 ## Running locally
 
@@ -56,9 +56,8 @@ Generated code is committed and never edited by hand.
 | Command | Regenerates | From |
 |---|---|---|
 | `make sqlc` | each feature's `internal/db` | that feature's `migrations/` and `queries/` (`sqlc.yaml`) |
-| `make docs` | `api/docs` | the swag annotations on the handlers |
 
-Both run pinned images (`sqlc/sqlc:1.30.0`, `ghcr.io/swaggo/swag:v1.16.6`) and need Docker.
+It runs a pinned image (`sqlc/sqlc:1.30.0`) and needs Docker. The OpenAPI document is not generated: it is built from the routes when the API starts.
 
 ## Building the image
 

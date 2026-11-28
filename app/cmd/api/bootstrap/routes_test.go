@@ -213,7 +213,7 @@ func TestBannerReportsWhetherDocsAreServed(t *testing.T) {
 		enabled bool
 		want    string
 	}{
-		{"enabled shows the url", true, "/docs/index.html"},
+		{"enabled shows the url", true, "/docs"},
 		{"disabled says so", false, "disabled"},
 	}
 
@@ -243,8 +243,37 @@ func TestDocsRoutesFollowTheConfig(t *testing.T) {
 			c.Config.Runtime.DocsEnabled = enabled
 		}))
 
-		if got := get(t, router, "/docs/index.html").Code; got != want {
-			t.Errorf("DocsEnabled=%v: GET /docs/index.html = %d, want %d", enabled, got, want)
+		for _, path := range []string{"/docs", "/openapi.json"} {
+			if got := get(t, router, path).Code; got != want {
+				t.Errorf("DocsEnabled=%v: GET %s = %d, want %d", enabled, path, got, want)
+			}
 		}
+	}
+}
+
+// The document is built from the routes as they are registered, so it can
+// be checked like any other behavior: what guards a route is what the
+// document says guards it.
+func TestTheContractDocumentsTheRoutesAndTheirSecurity(t *testing.T) {
+	router := newRouter(newTestContainer(t, func(c *Container) { c.Config.Runtime.DocsEnabled = true }))
+
+	rec := get(t, router, "/openapi.json")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /openapi.json = %d", rec.Code)
+	}
+	document := rec.Body.String()
+
+	for _, path := range []string{"/v1/auth/register", "/v1/auth/login", "/v1/auth/refresh", "/v1/auth/logout", "/v1/auth/user", "/v1/events", "/v1/events/publish"} {
+		if !strings.Contains(document, `"`+path+`"`) {
+			t.Errorf("the document does not list %s", path)
+		}
+	}
+	for _, code := range []string{"user.email_taken", "account.invalid_credentials", "auth.invalid_refresh_token"} {
+		if !strings.Contains(document, code) {
+			t.Errorf("the document does not name the error %s", code)
+		}
+	}
+	if !strings.Contains(document, "bearerAuth") {
+		t.Error("the document declares no bearer security for the protected routes")
 	}
 }
