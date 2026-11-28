@@ -4,6 +4,10 @@ All notable changes to `github.com/imlargo/medusa/postgres`. The format follows 
 
 ## [Unreleased]
 
+### Added
+
+- `queue.CatchUp(window)` for `Worker.Schedule`: a worker that starts enqueues the schedule's most recent slot if it is inside the window and was never enqueued, so a deploy or an outage that covers the minute of a daily job no longer costs that day's run.
+
 ## [0.2.0] - 2026-11-27
 
 ### Added

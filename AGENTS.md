@@ -160,7 +160,7 @@ Work caused by a request (send the receipt, process the upload) or by the clock 
    })
    ```
    Options: `queue.In("mail")` for another queue, `queue.After(time.Hour)`, `queue.MaxAttempts(1)` for work that must never repeat, `queue.Unique(key)` to enqueue an event once.
-3. Register the handler in `registerJobs` in `bootstrap/worker.go`: `queue.Register(worker, account.KindWelcome, ...)`. For the clock, also `worker.Schedule(kind, "35 6 * * *", payload)` (cron, UTC) or `worker.Periodic(kind, time.Hour, payload)`: either runs once per cluster.
+3. Register the handler in `registerJobs` in `bootstrap/worker.go`: `queue.Register(worker, account.KindWelcome, ...)`. For the clock, also `worker.Schedule(kind, "35 6 * * *", payload)` (cron, UTC) or `worker.Periodic(kind, time.Hour, payload)`: either runs once per cluster. Give a schedule with few slots a day `queue.CatchUp(2*time.Hour)`, or a deploy that lands on its minute costs the run.
 4. A test that runs the write and finds the job in `medusa_jobs`, after `queue.Install(ctx, pool)` on the test database (see `flow_test.go`).
 
 A handler returns an error to be retried later, and `queue.Permanent(err)` when no retry can help. A job out of attempts stays in `medusa_jobs` with `status = 'failed'` and its `last_error`; `queue.Client.Failed` lists them and `Retry(id)` puts one back.

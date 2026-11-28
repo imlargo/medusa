@@ -145,6 +145,7 @@ type scheduled struct {
 	when    cron
 	payload any
 	opts    []EnqueueOption
+	catchUp time.Duration
 }
 
 // WorkerOption configures a Worker.
@@ -255,14 +256,19 @@ func Register[T any](w *Worker, kind string, fn func(ctx context.Context, payloa
 //
 // Every replica of the worker tries, and a unique key per minute lets exactly
 // one succeed, so the job runs once per cluster. A minute that passes while
-// no worker is running is not made up afterwards. The kind needs a handler
-// like any other.
+// no worker is running is lost unless the schedule has [CatchUp], which a
+// job with few slots a day should. The kind needs a handler like any other.
 func (w *Worker) Schedule(kind, cronExpr string, payload any, opts ...EnqueueOption) {
 	when, err := parseCron(cronExpr)
 	if err != nil {
 		panic("queue: schedule of " + kind + ": " + err.Error())
 	}
-	w.scheduled = append(w.scheduled, scheduled{kind: kind, when: when, payload: payload, opts: opts})
+
+	var o enqueueOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	w.scheduled = append(w.scheduled, scheduled{kind: kind, when: when, payload: payload, opts: opts, catchUp: o.catchUp})
 }
 
 // Periodic enqueues a job of kind once per interval. Slots are aligned to
@@ -534,6 +540,7 @@ func (w *Worker) maintain(ctx context.Context) {
 	// The last minute whose schedules were enqueued. Starting one minute back
 	// makes the first tick handle the current minute.
 	lastMinute := time.Now().UTC().Truncate(time.Minute).Add(-time.Minute)
+	caughtUp := false
 
 	for {
 		select {
@@ -565,6 +572,11 @@ func (w *Worker) maintain(ctx context.Context) {
 				}
 				lastSlot[i] = slot
 			}
+			if !caughtUp {
+				// Tried on every tick until it works, so a database that is
+				// down when the worker starts does not cost the missed runs.
+				caughtUp = w.enqueueMissed(ctx, lastMinute)
+			}
 			lastMinute = w.enqueueScheduled(ctx, lastMinute, now.UTC().Truncate(time.Minute))
 		}
 	}
@@ -587,9 +599,7 @@ func (w *Worker) enqueueScheduled(ctx context.Context, last, current time.Time) 
 			if !s.when.matches(minute) {
 				continue
 			}
-			key := fmt.Sprintf("schedule:%s:%s", s.kind, minute.Format(time.RFC3339))
-			opts := append([]EnqueueOption{Unique(key)}, s.opts...)
-			if _, _, err := w.client.Enqueue(ctx, s.kind, s.payload, opts...); err != nil {
+			if _, err := w.enqueueSlot(ctx, s, minute); err != nil {
 				w.logger.ErrorContext(ctx, "queue could not enqueue a scheduled job", slog.String("kind", s.kind), slog.Any("error", err))
 				return last
 			}
@@ -597,6 +607,40 @@ func (w *Worker) enqueueScheduled(ctx context.Context, last, current time.Time) 
 		last = minute
 	}
 	return last
+}
+
+// enqueueMissed enqueues, for each schedule with a catch-up window, its most
+// recent slot at or before upTo that is inside the window. The slot's unique
+// key decides whether it was missed: when its job exists, nothing is added.
+// It reports whether every schedule was handled.
+func (w *Worker) enqueueMissed(ctx context.Context, upTo time.Time) bool {
+	for _, s := range w.scheduled {
+		oldest := upTo.Add(-s.catchUp)
+		for minute := upTo; s.catchUp > 0 && !minute.Before(oldest); minute = minute.Add(-time.Minute) {
+			if !s.when.matches(minute) {
+				continue
+			}
+			enqueued, err := w.enqueueSlot(ctx, s, minute)
+			if err != nil {
+				w.logger.ErrorContext(ctx, "queue could not make up a missed scheduled job", slog.String("kind", s.kind), slog.Any("error", err))
+				return false
+			}
+			if enqueued {
+				w.logger.InfoContext(ctx, "queue made up a scheduled job that was missed", slog.String("kind", s.kind), slog.Time("slot", minute))
+			}
+			break // only the most recent slot
+		}
+	}
+	return true
+}
+
+// enqueueSlot enqueues the job of one minute of a schedule, once: the key is
+// the same on every replica and for every later attempt.
+func (w *Worker) enqueueSlot(ctx context.Context, s scheduled, minute time.Time) (bool, error) {
+	key := fmt.Sprintf("schedule:%s:%s", s.kind, minute.Format(time.RFC3339))
+	opts := append([]EnqueueOption{Unique(key)}, s.opts...)
+	_, enqueued, err := w.client.Enqueue(ctx, s.kind, s.payload, opts...)
+	return enqueued, err
 }
 
 // defaultBackoff waits 5s, 10s, 20s... up to 10 minutes, give or take a

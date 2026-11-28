@@ -116,6 +116,7 @@ type enqueueOptions struct {
 	after       time.Duration
 	uniqueKey   *string
 	activeKey   *string
+	catchUp     time.Duration
 }
 
 // EnqueueOption shapes one job.
@@ -162,6 +163,19 @@ func Unique(key string) EnqueueOption {
 // this key: at most one at a time, and a new one as soon as it ends.
 func UniqueWhileActive(key string) EnqueueOption {
 	return func(o *enqueueOptions) { o.activeKey = &key }
+}
+
+// CatchUp is for [Worker.Schedule] only. When a worker starts, it enqueues
+// the schedule's most recent slot if that slot is at most window old and was
+// never enqueued: the run a deploy or an outage skipped. Only the latest
+// missed slot is made up, not every one in the window.
+//
+// Without it a slot that passes while no worker is running is lost, which
+// for a job that runs once a day means a day. Keep window under the worker's
+// retention: the slot's key is what tells a missed run from one already
+// done, and it is deleted with the finished job.
+func CatchUp(window time.Duration) EnqueueOption {
+	return func(o *enqueueOptions) { o.catchUp = window }
 }
 
 // Enqueue adds a job outside a transaction. See [Client.EnqueueTx].
